@@ -10,7 +10,7 @@ const at = (iso: string) => new Date(iso).getTime();
 let n = 0;
 const log = (missionId: string, date: string, startHM: string, min: number, done = true, x: Partial<Log> = {}): Log => {
   const start = at(`${date}T${startHM}`);
-  return { id: `l${n++}`, missionId, date, start, end: start + min * 60000, plannedMin: min, units: 1, done, ...x };
+  return { id: `l${n++}`, missionId, date, start, end: start + min * 60000, plannedMin: min, units: done ? 1 : 0, done, ...x };
 };
 const withChore = (s: State) => {
   s.missions.push({ id: 'chore', objectiveId: '', title: 'Chore', kind: 'chore', energy: 'none', minutes: 5, minLevel: 1, everyDays: 7,
@@ -95,6 +95,7 @@ describe('learned timing', () => {
       s.logs.push(log('course-lessons', d, '15:00', 30, i < 4));
     }
     expect(bestParts(s, 'mental')![0]).toBe(0);
+    expect(bestParts(s, 'mental', 3)![0]).toBe(0);
     s.days['2026-11-12'] = { level: 3 }; s.updatedAt = Math.random();
     const now = at('2026-11-12T08:00');
     const first = layoutDay(s, forecast(s, now), '2026-11-12', now).find((i) => i.kind === 'mission' && s.missions.find((m) => m.id === i.missionId)?.energy === 'mental' && s.missions.find((m) => m.id === i.missionId)?.kind !== 'habit');
@@ -320,5 +321,34 @@ describe('workout rotation', () => {
     const now = at('2026-11-12T08:00');
     const it = layoutDay(s, forecast(s, now), '2026-11-12', now).find((i) => i.missionId === 'court');
     if (it) { expect(it.sub).toMatch(/^Session B/); expect(it.detail).toMatch(/^b/); }
+  });
+});
+
+describe('time slots by real progress', () => {
+  it('prefers the slot with more progress per hour, not just more finishes', async () => {
+    const { bestParts, slotScores } = await import('../src/model/learn');
+    const s = sample();
+    for (let i = 0; i < 6; i++) {
+      const d = addDays('2026-10-01', i);
+      s.logs.push(log('course-lessons', d, '09:00', 60));  // finishes, but takes twice the estimate
+      s.logs.push(log('course-lessons', d, '15:00', 20));  // finishes fast
+    }
+    expect(bestParts(s, 'mental')![0]).toBe(2);
+    const sc = slotScores(s, 'mental');
+    expect(sc[2].score).toBeGreaterThan(sc[0].score);
+  });
+  it('can differ by energy level, leaning on the overall pattern when a level has little data', async () => {
+    const { slotScores } = await import('../src/model/learn');
+    const s = sample();
+    for (let i = 0; i < 8; i++) {
+      const d = addDays('2026-10-01', i);
+      s.logs.push(log('course-lessons', d, '09:00', 20, true, { level: 4 }));
+      s.logs.push(log('course-lessons', d, '15:00', 60, true, { level: 4 }));
+    }
+    s.logs.push(log('course-lessons', '2026-10-20', '09:00', 90, true, { level: 2 })); // one bad Standby morning
+    const at4 = slotScores(s, 'mental', 4), at2 = slotScores(s, 'mental', 2);
+    expect(at4[0].score).toBeGreaterThan(at4[2].score);
+    expect(at2[0].score).toBeLessThan(at4[0].score);   // the bad Standby morning shows up...
+    expect(at2[0].score).toBeGreaterThan(at2[2].score); // ...but one day doesn't flip the pattern
   });
 });

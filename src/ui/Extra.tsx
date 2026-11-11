@@ -3,7 +3,7 @@ import { achievements, heroLevel, xpOf } from '../model/game';
 import { Choice } from './Choice';
 import type { Library } from '../model/vm';
 import { addDays, dateOf, fmtDate, fmtDay, fmtDur, fmtT, nowTs, weekStart } from '../model/time';
-import { afterStats, morningStats, pushSize, sustainableCapacity, weekdayFactor, choreDue, choreInterval, choreLast, contextStats, crashAfter5, exerciseCeiling, factor, flareStats, followThrough, learnedCapacity } from '../model/learn';
+import { afterStats, bestParts, slotScores, partName, morningStats, pushSize, sustainableCapacity, weekdayFactor, choreDue, choreInterval, choreLast, crashAfter5, exerciseCeiling, factor, flareStats, followThrough, learnedCapacity } from '../model/learn';
 import { eventsOn } from '../model/schedule';
 import { levelName, nice } from '../model/seed';
 import { fromHM, toHM } from './bits';
@@ -41,13 +41,18 @@ export function Debrief({ lib }: { lib: Library }) {
     return { k, min: logs.filter((l) => ids.has(l.missionId)).reduce((a, l) => a + (l.end - l.start) / 60000, 0) };
   });
   const floors = days.filter((d) => s.days[d]?.floorAwarded).length;
-  const lc = learnedCapacity(s, today), crash = crashAfter5(s, today), ft = followThrough(s), ctx = contextStats(s), fl = flareStats(s);
+  const lc = learnedCapacity(s, today), crash = crashAfter5(s, today), ft = followThrough(s), fl = flareStats(s);
   const learned: string[] = [];
   for (const m of s.missions) { const f = factor(s, m.id); if (Math.abs(f - 1) >= 0.1) learned.push(`${m.title} really takes about ${Math.round(m.minutes * f)} min (estimate was ${m.minutes}). Plans now use that.`); }
   for (const n of [1, 2, 3, 4, 5] as Level[]) if (lc[n] && lc[n]!.n >= 3) learned.push(`A ${nice(levelName(n))} day really gets about ${fmtDur(lc[n]!.mean)} of focused work done.`);
   if (crash.confident) learned.push(`The day after Plus Ultra averages level ${crash.after.toFixed(1)}. Those days are now planned light.`);
   if (ft.n >= 10) learned.push(`${Math.round(ft.rate * 100)}% of started work gets finished in one go.`);
-  for (const c of ctx) if (c.rate <= 0.6 || c.rate >= 0.9) learned.push(`${c.energy[0].toUpperCase() + c.energy.slice(1)} work in the ${c.part.toLowerCase()} gets finished ${Math.round(c.rate * 100)}% of the time.${c.n >= 8 ? ' Plans now lean toward your better times.' : ''}`);
+  for (const en of ['mental', 'physical', 'social']) {
+    const order = bestParts(s, en);
+    if (!order) continue;
+    const sc = slotScores(s, en), top = sc[order[0]], low = sc[order[order.length - 1]];
+    learned.push(`${en[0].toUpperCase() + en.slice(1)} work moves your goals furthest in the ${partName(top.part).toLowerCase()} (about ${Math.round((top.score / low.score - 1) * 100)}% more progress per hour than the ${partName(low.part).toLowerCase()}). Plans lean that way, checked separately for each energy level.`);
+  }
   const sus = sustainableCapacity(s, today), push = pushSize(s, today);
   if (sus !== null) learned.push(`Sustainable capacity: about ${fmtDur(sus)} of focused work a day (your best recent day that wasn't followed by a crash). Active days plan to it; Plus Ultra plans ${Math.round(push.pct * 100)}% past it.`);
   for (const p of push.pushes.slice(-3)) learned.push(`Push ${fmtDate(p.start)}${p.end !== p.start ? ` to ${fmtDate(p.end)}` : ''} (${p.days} days with the dial-back): ${p.net >= 0 ? 'came out ahead' : 'came out behind'} by ${fmtDur(Math.abs(p.net))} vs. staying at capacity, so the next push is ${p.net >= 0 ? 'a bit bigger' : 'a bit smaller'}.`);

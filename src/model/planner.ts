@@ -403,7 +403,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     const soft: [number, number][] = [];
     if (bad) for (const it of items) { const c = catOf(it); if (c && bad.has(c)) soft.push([it.end, it.end + 45]); }
     let got: { i: number; a: number } | null = null;
-    const prefs = !a.habit ? bestParts(s, m.energy) : null;
+    const prefs = !a.habit ? bestParts(s, m.energy, level) : null;
     for (const fb of soft.length ? [[...forbid, ...soft], forbid] : [forbid]) {
       if (prefs) for (const part of prefs) { const g = find(a.min, Math.max(lo, PART_START[part]), fb, hi); if (g && g.a < PART_END[part]) { got = g; break; } }
       got ||= find(a.min, lo, fb, hi);

@@ -411,6 +411,16 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     usedUnits.set(m.id, skip + a.units);
     items.push({ key: keyFor(m.id), start: at, end: at + a.min, title: a.habit ? habitTitle(m, level) : m.title, sub: label(m, a.min, a.units, skip), detail: m.note, kind: 'mission', missionId: m.id, units: a.units, baseMin: a.baseMin, min: a.min });
   }
+  // Blocks can land out of planning order (best times, gaps), so name each mission's blocks in time order.
+  for (const id of usedUnits.keys()) {
+    const m = byId.get(id);
+    if (!m || m.kind !== 'work' || !m.labels?.length) continue;
+    let skip = run?.missionId === id ? run.units : 0;
+    for (const it of items.filter((x) => x.missionId === id && !x.done && !x.running && x.units).sort((x, y) => x.start - y.start)) {
+      it.sub = label(m, it.min || 0, it.units!, skip);
+      skip += it.units!;
+    }
+  }
   items.sort((a, b) => a.start - b.start || a.end - b.end);
   const cur = items.find((i) => i.running) || items.find((i) => !i.done && !i.past && i.block?.kind !== 'note' && i.start <= nowMin + 5 && i.end > nowMin);
   if (cur) cur.now = true;

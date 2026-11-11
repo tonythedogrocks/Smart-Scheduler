@@ -298,3 +298,15 @@ describe('V1 features', () => {
     expect(S().missions.find((x) => x.id === 'exam-steps')!.unitsLeft).toBe(10);
   });
 });
+
+describe('block names follow the clock', () => {
+  it('names a mission’s blocks in time order even when placed out of order', () => {
+    const s = sample(); s.days['2026-11-12'] = { level: 5 };
+    const m = s.missions.find((x) => x.id === 'course-lessons')!;
+    m.labels = Array.from({ length: m.unitsLeft! }, (_, i) => `Unit|lesson ${i + 1}`);
+    const now = at('2026-11-12T08:00');
+    const its = layoutDay(s, forecast(s, now), '2026-11-12', now).filter((i) => i.missionId === 'course-lessons').sort((a, b) => a.start - b.start);
+    const firsts = its.map((i) => +/lessons? (\d+)/.exec(i.sub || '')![1]);
+    expect([...firsts].sort((a, b) => a - b)).toEqual(firsts);
+  });
+});

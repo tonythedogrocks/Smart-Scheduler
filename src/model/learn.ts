@@ -1,6 +1,6 @@
 import type { State, Level, Mission } from './types';
 import { addDays, dateOf, diffDays, minsOf, parseD, weekStart, weekday } from './time';
-import { isRest } from './schedule';
+import { eventsOn, isRest } from './schedule';
 
 const mins = (l: { start: number; end: number }) => (l.end > 0 ? Math.max(1, (l.end - l.start) / 60000) : 0);
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
@@ -32,13 +32,80 @@ export function learnedCapacity(s: State, today: string): Partial<Record<Level, 
   return out;
 }
 
+/** Worked days before `today` (newest first), skipping rest days: date, level, focused minutes. */
+function workedDays(s: State, today: string, n = 21) {
+  const out: { d: string; level: number; o: number }[] = [];
+  for (let i = 1; i <= n; i++) {
+    const d = addDays(today, -i), r = s.days[d];
+    if (!r?.level || isRest(s, d)) continue;
+    out.push({ d, level: r.level, o: workMinOn(s, d) });
+  }
+  return out;
+}
+
+/**
+ * Sustainable capacity: the best recent day (last 3 weeks, not a Recovery day) that wasn't followed
+ * by a crash (the next worked day reached at least 60% of it). Rises as soon as a bigger day holds.
+ */
+export function sustainableCapacity(s: State, today: string): number | null {
+  const xs = workedDays(s, today).filter((x) => x.level !== 1);
+  if (xs.length < 2) return null;
+  const ok = xs.filter((x, i) => i === 0 || xs[i - 1].o >= 0.6 * x.o).map((x) => x.o);
+  const best = ok.length ? Math.max(...ok) : 0;
+  return best >= 30 ? Math.round(best) : null;
+}
+
+/**
+ * How far a Plus Ultra day plans past sustainable capacity. Starts at +25%. Each finished push
+ * (a run of level-5 days plus up to 2 dial-back days after) is scored against staying at capacity:
+ * came out ahead -> next push 5 points bigger, behind -> 5 points smaller (10% to 50%).
+ */
+export function pushSize(s: State, today: string) {
+  let pct = 0.25;
+  const pushes: { start: string; end: string; days: number; total: number; cap: number; net: number }[] = [];
+  const dates = Object.keys(s.days).filter((d) => d < today && s.days[d].level && !isRest(s, d)).sort();
+  const lv = (d: string) => s.days[d]?.level;
+  for (let i = 0; i < dates.length; i++) {
+    const d = dates[i];
+    if (lv(d) !== 5 || (i > 0 && lv(dates[i - 1]) === 5)) continue;
+    let j = i; while (j + 1 < dates.length && lv(dates[j + 1]) === 5) j++;
+    const after = dates.slice(j + 1, j + 3).filter((x) => lv(x) !== 5);
+    if (j + 2 >= dates.length && after.length < 2) continue; // dial-back not over yet
+    const days = [...dates.slice(i, j + 1), ...after];
+    const cap = sustainableCapacity(s, d);
+    if (cap === null) continue;
+    const total = days.reduce((a, x) => a + workMinOn(s, x), 0), net = total - cap * days.length;
+    pct = Math.round(clamp(pct + (net >= 0 ? 0.05 : -0.05), 0.1, 0.5) * 100) / 100;
+    pushes.push({ start: d, end: dates[j], days: days.length, total: Math.round(total), cap, net: Math.round(net) });
+    i = j;
+  }
+  return { pct, pushes };
+}
+
+/** Day-of-week pattern: how a weekday's output compares with the average (needs 3 of that weekday, 10 days). */
+export function weekdayFactor(s: State, today: string, wd: number): number {
+  const xs = workedDays(s, today, 90);
+  const same = xs.filter((x) => weekday(x.d) === wd);
+  if (xs.length < 10 || same.length < 3) return 1;
+  const all = xs.reduce((a, x) => a + x.o, 0) / xs.length;
+  if (all <= 0) return 1;
+  return clamp(same.reduce((a, x) => a + x.o, 0) / same.length / all, 0.75, 1.25);
+}
+
 export function capacityAt(s: State, level: number, today: string, optimistic = false): number {
   const lc = learnedCapacity(s, today);
-  const one = (l: Level) => {
+  const sus = sustainableCapacity(s, today);
+  const base = (l: Level) => {
     const prior = s.settings.capacity[l], got = lc[l];
     if (!got || got.n < 3) return prior;
     const blended = got.n >= 6 ? got.mean : (got.mean + prior) / 2;
     return optimistic ? Math.max(prior, blended) : blended;
+  };
+  // Once sustainable capacity is known, Active plans to it and Plus Ultra plans a push past it.
+  const one = (l: Level) => {
+    if (sus === null || l < 4) return base(l);
+    const four = Math.max(sus, base(3));
+    return l === 4 ? four : four * (1 + pushSize(s, today).pct);
   };
   const lo = clamp(Math.floor(level), 1, 5) as Level, hi = clamp(Math.ceil(level), 1, 5) as Level;
   return one(lo) + (one(hi) - one(lo)) * (level - lo);
@@ -134,6 +201,9 @@ export function exerciseMinWeek(s: State, weekStartDate: string): number {
   const end = addDays(weekStartDate, 7);
   let t = s.logs.filter((l) => l.date >= weekStartDate && l.date < end && isExercise(ph.get(l.missionId))).reduce((a, l) => a + mins(l), 0);
   for (const e of s.events) if (e.date && e.date >= weekStartDate && e.date < end && e.kind === 'workout') t += e.exerciseMin ?? e.end - e.start;
+  // biking there and back counts: commitments (dated or weekly) and errands done by bike
+  for (let i = 0; i < 7; i++) for (const e of eventsOn(s, addDays(weekStartDate, i))) if (e.bike || (e.kind === 'shift' && s.settings.shift.bike)) t += 2 * e.travel;
+  for (const l of s.logs) { const m = ph.get(l.missionId); if (m?.bike && m.travel && l.done && l.date >= weekStartDate && l.date < end) t += 2 * m.travel; }
   return t;
 }
 

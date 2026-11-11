@@ -3,7 +3,9 @@ import { S, actions, go, setLocal } from '../model/store';
 import type { PanelVM, Library } from '../model/vm';
 import { fmtDur, fmtT, nowTs } from '../model/time';
 import { bodyFat } from '../model/learn';
-import { orders } from '../model/planner';
+import { describeUnits, nextLabels, orders } from '../model/planner';
+import { isBackupDay } from '../model/schedule';
+import { addDays, weekStart } from '../model/time';
 import { Arrow, useTick } from './bits';
 import { Choice } from './Choice';
 
@@ -60,11 +62,12 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
         {mine && run && (
           <>
             <span class="caption" style="align-self:flex-start;font-size:17px;transform:rotate(-1.5deg)">{sab ? 'IN PROGRESS' : 'MISSION IN PROGRESS'}... {fmtDur(Math.max(0, (nowTs() - run.startedAt) / 60000))}</span>
+            {mission?.kind === 'work' && mission.labels?.length ? <Steps labels={nextLabels(mission, run.units)} ticked={run.ticked || 0} /> : null}
             <button type="button" class="big fin" onClick={() => { actions.finish(true); setFlash(true); }}>
               <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
               <span>DONE!</span>
             </button>
-            <button type="button" class="plain" onClick={() => actions.finish(false)}>Stop here. The rest goes back to the pool.</button>
+            <button type="button" class="plain" onClick={() => actions.finish(false)}>{run.ticked ? 'Stop here. Ticked steps count; the rest goes back to the pool.' : 'Stop here. The rest goes back to the pool.'}</button>
           </>
         )}
         {success && (
@@ -76,6 +79,14 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
               </button>
             )}
           </>
+        )}
+        {p.act === 'meal' && p.meal === 'dinner' && p.date === lib.today && (
+          <button type="button" class="big go sm" onClick={() => actions.dinnerNow()}>DINNER NOW</button>
+        )}
+        {p.act === 'backup' && p.date && (
+          <button type="button" class="small on" style="align-self:flex-start" onClick={() => actions.toggleBackup(weekStart(p.date!))}>
+            {isBackupDay(s, p.date) ? `Back to a normal ${s.settings.restDayName}` : `Use this ${s.settings.restDayName} as a backup work day`}
+          </button>
         )}
         {p.act === 'meal' && p.meal === 'dinner' && p.date && p.date >= lib.today && !day.cook && (
           <div class="row">
@@ -124,5 +135,30 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
         {p.key === 'shifts' && <button type="button" class="small" onClick={() => setLocal({ sheet: 'add' })}>Enter shifts</button>}
       </div>
     </div>
+  );
+}
+
+/** The running block's steps, ticked off in order. Stopping early still counts what's ticked. */
+function Steps({ labels, ticked }: { labels: string[]; ticked: number }) {
+  const items: { t: string; n: number; upTo: number }[] = [];
+  let upTo = 0;
+  for (const l of labels) {
+    const last = items[items.length - 1];
+    if (last && labels[upTo - 1] === l) { last.n++; last.upTo = ++upTo; continue; }
+    upTo++;
+    items.push({ t: describeUnits([l]), n: 1, upTo });
+  }
+  return (
+    <ul class="steps" style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;width:100%">
+      {items.map((it, i) => {
+        const on = ticked >= it.upTo, before = i === 0 ? 0 : items[i - 1].upTo;
+        const can = on ? ticked === it.upTo : ticked === before;
+        return (
+          <li><label class="check" style={on ? 'text-decoration:line-through;color:var(--soft)' : ''}>
+            <input type="checkbox" checked={on} disabled={!can} onChange={() => actions.tick(on ? before : it.upTo)} />{it.t}
+          </label></li>
+        );
+      })}
+    </ul>
   );
 }

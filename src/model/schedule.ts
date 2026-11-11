@@ -1,5 +1,5 @@
 import type { State, Evt } from './types';
-import { addDays, dateOf, minsOf, parseD, weekday } from './time';
+import { addDays, dateOf, minsOf, parseD, weekStart, weekday } from './time';
 import { cookMinutes } from './learn';
 
 export interface Block {
@@ -9,7 +9,31 @@ export interface Block {
 }
 
 /** The weekly rest day: essentials only. */
-export const isRest = (s: State, date: string) => s.settings.restDay !== null && weekday(date) === s.settings.restDay;
+export const isRest = (s: State, date: string) => s.settings.restDay !== null && weekday(date) === s.settings.restDay && !(s.settings.backupWeeks || []).includes(weekStart(date));
+/** The rest day of a week that has been switched to a backup work day. */
+export const isBackupDay = (s: State, date: string) => s.settings.restDay !== null && weekday(date) === s.settings.restDay && (s.settings.backupWeeks || []).includes(weekStart(date));
+
+/** Sunrise and sunset in local minutes (NOAA approximation). */
+export function sunTimes(date: string, lat: number, lon: number): [number, number] {
+  const d = parseD(date), start = new Date(d.getFullYear(), 0, 1, 12);
+  const n = Math.round((d.getTime() - start.getTime()) / 86400000) + 1, g = (2 * Math.PI / 365) * (n - 1);
+  const eq = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
+  const decl = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g) + 0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+  const r = Math.PI / 180, la = lat * r;
+  const ha = Math.acos(Math.min(1, Math.max(-1, Math.cos(90.833 * r) / (Math.cos(la) * Math.cos(decl)) - Math.tan(la) * Math.tan(decl)))) / r;
+  const tz = -d.getTimezoneOffset();
+  return [720 - 4 * (lon + ha) - eq + tz, 720 - 4 * (lon - ha) - eq + tz];
+}
+
+/** Usual dinner time, learned from "Dinner now" taps: same weekday first, then any recent day. */
+export function learnedDinner(s: State, date: string): number | null {
+  const taps = Object.entries(s.days).filter(([d, r]) => r.dinnerTap !== undefined && d < date).sort(([a], [b]) => b.localeCompare(a));
+  const med = (xs: number[]) => { const a = [...xs].sort((x, y) => x - y); return a[Math.floor(a.length / 2)]; };
+  const same = taps.filter(([d]) => weekday(d) === weekday(date)).slice(0, 8).map(([, r]) => r.dinnerTap!);
+  const any = taps.slice(0, 14).map(([, r]) => r.dinnerTap!);
+  const m = same.length >= 3 ? med(same) : any.length >= 3 ? med(any) : null;
+  return m === null ? null : Math.min(1140, Math.max(1020, Math.round(m / 5) * 5));
+}
 
 /** Which week of the month a date falls in (1-4), and whether it is the last one. */
 export function inWeeks(date: string, nth: number[]): boolean {
@@ -83,7 +107,7 @@ export function fixedBlocks(s: State, date: string): Block[] {
   const day = s.days[date] || {};
   const lunchEnd = place('lunch', day.lunchAt ?? st.lunchAt, st.lunchMin, 660, 870);
   // Cooking: a block right before dinner that turns into dinner when it's done.
-  let dinnerWant = day.dinnerAt ?? st.dinnerAt;
+  let dinnerWant = day.dinnerAt ?? learnedDinner(s, date) ?? st.dinnerAt;
   const fam = day.cook === 'family';
   const cookLen = cookMinutes(s, fam);
   if (day.cook) {

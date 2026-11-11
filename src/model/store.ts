@@ -58,7 +58,7 @@ const today = () => dateOf(nowTs());
 function afterChange(s: State, date: string) {
   const d = (s.days[date] ||= {});
   if (d.level && !d.floorAwarded) {
-    const due = habitsDue(s, date, d.level);
+    const due = habitsDue(s, date, d.level).filter((m) => !m.notFloor);
     const ok = due.every((m) => s.logs.some((l) => l.missionId === m.id && l.date === date && l.done));
     if (ok && (due.length > 0 || d.level === 1)) d.floorAwarded = true;
   }
@@ -74,17 +74,21 @@ export const actions = {
     mutate((s) => { if (!s.running) s.running = { missionId, units, plannedMin, startedAt: nowTs(), ...(step !== undefined ? { step } : {}) }; });
   },
   /** done=false: stop here. Time still counts; the work quietly goes back to the pool. */
+  /** Tick off steps of the running block in order (count = how many units are done so far). */
+  tick(count: number) { mutate((s) => { if (s.running) s.running.ticked = Math.max(0, Math.min(s.running.units, count)); }); },
   finish(done: boolean) {
     let got: string[] = [], floor = false;
     mutate((s) => {
       const r = s.running; if (!r) return;
       const date = today(), end = nowTs();
-      const log: Log = { id: uid(), missionId: r.missionId, date, start: r.startedAt, end, plannedMin: r.plannedMin, units: done ? r.units : 0, done, level: s.days[date]?.level, xp: Math.round(Math.min((end - r.startedAt) / 60000, Math.max(r.plannedMin * 2, 10))), ...(r.step !== undefined ? { step: r.step } : {}) };
+      // stopping partway still counts the steps ticked off; the rest goes back to the pool
+      const doneUnits = done ? r.units : Math.min(r.units, r.ticked || 0);
+      const log: Log = { id: uid(), missionId: r.missionId, date, start: r.startedAt, end, plannedMin: r.plannedMin, units: doneUnits, done, level: s.days[date]?.level, xp: Math.round(Math.min((end - r.startedAt) / 60000, Math.max(r.plannedMin * 2, 10))), ...(r.step !== undefined ? { step: r.step } : {}) };
       s.logs.push(log);
       s.running = undefined;
       const m = s.missions.find((x) => x.id === r.missionId);
-      if (done && m?.kind === 'work') {
-        m.unitsLeft = Math.max(0, (m.unitsLeft || 0) - r.units);
+      if (doneUnits > 0 && m?.kind === 'work') {
+        m.unitsLeft = Math.max(0, (m.unitsLeft || 0) - doneUnits);
         if (m.unitsLeft === 0) m.doneAt = date;
       }
       const before = !!s.days[date]?.floorAwarded;
@@ -110,6 +114,16 @@ export const actions = {
       if (e.date || !date) s.events = s.events.filter((x) => x.id !== id);
       else (e.skip ||= []).push(date);
     });
+  },
+  /** Dinner's called: dinner starts now, and the time teaches the usual dinner time. */
+  dinnerNow() {
+    const t = nowTs(), mins = new Date(t).getHours() * 60 + new Date(t).getMinutes();
+    mutate((s) => { const d = (s.days[today()] ||= {}); d.dinnerAt = mins; d.dinnerTap = mins; if (d.cook && !d.cookEnd) { d.cookEnd = t; d.cookStart ??= t - 1; } });
+    toast('Dinner time. Enjoy it.');
+  },
+  /** Make a week's rest day a backup work day, or turn that back off. */
+  toggleBackup(weekMonday: string) {
+    mutate((s) => { const w = new Set(s.settings.backupWeeks || []); if (w.has(weekMonday)) w.delete(weekMonday); else w.add(weekMonday); s.settings.backupWeeks = [...w].sort().slice(-8); });
   },
   setDay(date: string, patch: Partial<State['days'][string]>) { mutate((s) => { s.days[date] = { ...(s.days[date] || {}), ...patch }; }); },
   setSettings(patch: Partial<State['settings']>) { mutate((s) => { s.settings = { ...s.settings, ...patch }; }); },

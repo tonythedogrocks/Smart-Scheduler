@@ -3,13 +3,13 @@ import { addDays, dateOf, diffDays, fmtDate, fmtDay, fmtDur, fmtT, minsOf, weekS
 import { describeUnits, forecast, layoutDay, nextLabels, orders, habitMin, habitTitle, habitsDue, type Forecast, type PlanItem } from './planner';
 import { levelName, nice } from './seed';
 import { bodyFat, choreDue, choreInterval, choreLast, exerciseCeiling, factor, partOf } from './learn';
-import { eventsOn, isRest } from './schedule';
+import { eventsOn, isBackupDay, isRest } from './schedule';
 
 export interface PanelVM {
   key: string; h: string; t: string; m?: string; d?: string; wide?: boolean;
   now?: boolean; done?: boolean; running?: boolean; alert?: boolean;
   missionId?: string; units?: number; baseMin?: number; min?: number; step?: number;
-  act?: 'mission' | 'meal' | 'cook' | 'morning' | 'choice' | 'event' | 'objective' | 'info';
+  act?: 'mission' | 'meal' | 'cook' | 'morning' | 'backup' | 'choice' | 'event' | 'objective' | 'info';
   evtId?: string; date?: string; objectiveId?: string; meal?: 'lunch' | 'dinner'; editable?: boolean;
 }
 export interface ChapterVM { title: string; panels: PanelVM[] }
@@ -41,6 +41,7 @@ function dayIssue(s: State, fc: Forecast, date: string, now: number): { issue: I
   let sub: string;
   if (isToday) {
     chapters = CH.map((title) => ({ title, panels: [] as PanelVM[] }));
+    if (isBackupDay(s, date)) chapters[0].panels.push({ key: 'backup', h: 'BACKUP', t: `Backup work day`, m: `This ${s.settings.restDayName} is planned like a normal day.`, wide: true, act: 'backup', date });
     for (const it of items) if (it.block?.kind !== 'travel' || true) chapters[partOf(it.start % 1440 < 300 ? 1439 : it.start)].panels.push(itemPanel(s, it, date, true));
     chapters.forEach((c) => { if (!c.panels.length) c.panels.push({ key: 'open', h: 'OPEN', t: 'Nothing queued', m: 'Rest counts too.', wide: true, act: 'info' }); });
     sub = sab ? restName : lv ? `Level ${lv} · ${nice(levelName(lv))}` : 'Level not set yet';
@@ -62,13 +63,14 @@ function dayIssue(s: State, fc: Forecast, date: string, now: number): { issue: I
       if (due === date) panels.unshift({ key: `due:${m.id}`, h: 'DUE', t: m.title, m: 'Planned on the day around being home', act: 'info', wide: true });
     }
     if (sab) panels.splice(panels.findIndex((p) => p.t === 'Off Duty'), 0,
-      { key: 'ess', h: 'DAY', t: 'Essentials only', wide: true, act: 'info' },
+      { key: 'ess', h: 'DAY', t: 'Essentials only', m: 'Need it? It can be a backup work day this week.', wide: true, act: 'backup', date },
       { key: 'debrief', h: 'EVE', t: 'Debrief', m: 'Progress, what the app learned, next week', act: 'info' },
       { key: 'shifts', h: 'EVE', t: 'Enter shifts', m: 'Posted on Sundays', act: 'info' });
     else if (work.length) {
       const names = [...new Set(work.map((b) => s.objectives.find((o) => o.id === s.missions.find((m) => m.id === b.missionId)?.objectiveId)?.title))].slice(0, 3);
       panels.unshift({ key: 'pencil', h: 'PENCILLED', t: `About ${fmtDur(work.reduce((a, b) => a + b.min, 0))} of missions`, m: names.map((n) => nice(n || '')).join(' · '), d: 'Planned against a modest day. The real plan is dealt when you set that day\'s level.', wide: true, act: 'info' });
     }
+    if (isBackupDay(s, date)) panels.unshift({ key: 'backup', h: 'BACKUP', t: 'Backup work day', m: `This ${s.settings.restDayName} is planned like a normal day.`, wide: true, act: 'backup', date });
     chapters = [{ title: 'ON THE SCHEDULE', panels }];
     const ev = items.find((i) => i.block?.kind === 'event');
     sub = sab ? restName : ev ? `${ev.title.length > 14 ? ev.title.slice(0, 13) + '…' : ev.title} ${fmtT(ev.start)}` : items.some((i) => i.block?.key.startsWith('f:dishes')) ? 'Dishes' : 'Open';
@@ -180,7 +182,7 @@ export function buildLibrary(s: State, now: number): Library {
 
 /** The floor line shown on the Status Report for a level. */
 export function floorText(s: State, date: string, level: number): string {
-  const due = habitsDue(s, date, level);
+  const due = habitsDue(s, date, level).filter((m) => !m.notFloor);
   if (!due.length) return isRest(s, date) ? `${s.settings.restDayName}: essentials only.` : 'Rest. That is the whole job today.';
   return due.map((m) => `${habitTitle(m, level).replace(/^[^:]+:\s*/, '')} ${m.lowTitle && level <= 2 ? '' : habitMin(m, level) + ' min'}`.trim()).join(' · ');
 }

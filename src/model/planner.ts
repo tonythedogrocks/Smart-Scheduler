@@ -1,7 +1,7 @@
 import type { State, Mission, Level, Objective } from './types';
 import { addDays, dateOf, diffDays, minsOf, weekStart, weekday } from './time';
-import { fixedBlocks, freeSlots, isRest, type Block } from './schedule';
-import { afterStats, bestParts, capacityAt, choreDue, exerciseCeiling, exerciseMinWeek, factor, flareSpike, isExercise, partOf, predictLevel, workMinOn } from './learn';
+import { fixedBlocks, freeSlots, isRest, sunTimes, type Block } from './schedule';
+import { afterStats, weekdayFactor, bestParts, capacityAt, choreDue, exerciseCeiling, exerciseMinWeek, factor, flareSpike, isExercise, partOf, predictLevel, workMinOn } from './learn';
 
 export interface Alloc { missionId: string; units: number; baseMin: number; min: number; habit?: boolean; clock?: boolean }
 export interface DayAlloc { date: string; level: number; rest: boolean; blocks: Alloc[]; capMin: number }
@@ -63,6 +63,7 @@ export function habitsDue(s: State, date: string, level: number, last?: Map<stri
   const sab = isRest(s, date);
   return s.missions.filter((m) => {
     if (m.kind !== 'habit' || m.archived || level < m.minLevel) return false;
+    if (m.days && !m.days.includes(weekday(date))) return false;
     if (sab && !m.restOk) return false;
     if (m.everyDays && m.everyDays > 1) {
       const ld = last ? last.get(m.id) ?? null : lastDone(s, m.id, date);
@@ -160,7 +161,8 @@ export function forecast(s: State, now: number): Forecast {
       if (t > 0 && m.everyDays) last.set(m.id, date);
     }
 
-    let cap = capacityAt(s, level, today, t === 0);
+    // future days also follow the learned weekday pattern; today uses the real level
+    let cap = capacityAt(s, level, today, t === 0) * (t === 0 ? 1 : weekdayFactor(s, today, weekday(date)));
     if (t === 0) cap -= workMinOn(s, date) + (run && byId.get(run.missionId)?.kind !== 'habit' ? run.plannedMin : 0);
     cap = Math.min(cap, freeMin);
     const capMin = Math.max(0, cap);
@@ -200,13 +202,13 @@ export function forecast(s: State, now: number): Forecast {
           // don't stop halfway through an item that spans units (a chapter quiz, say)
           if (m.labels?.length && u >= 1) { const at0 = m.labels.length - left; while (u < left && m.labels[at0 + u] === m.labels[at0 + u - 1]) u++; }
           if (u < 1 || unit * 0.6 > cap) continue;
-          min = Math.round(u * unit);
+          min = Math.round(u * unit) + 2 * (m.travel || 0);
           const dueIn = o?.due ? Math.max(1, diffDays(date, o.due)) : 0;
-          score = dueIn ? clamp((objLeft(m.objectiveId) / dueIn / baseCap) * 2, 0.3, 3) : 0.3;
+          score = dueIn ? clamp((objLeft(m.objectiveId) / dueIn / baseCap) * 2, 0.3, 3) : m.errand ? 5 : 0.3;
           if (m.clock) score *= 2;
         } else {
           if (m.dailyCapMin && spent + m.minutes * 0.5 > m.dailyCapMin) continue;
-          min = Math.round(m.minutes * ff); u = 1;
+          min = Math.round(m.minutes * ff) + 2 * (m.travel || 0); u = 1;
           if (min * 0.6 > cap) continue;
           const wd = weekMin.get(wk(m.id, date)) || 0;
           score = 0.6 * Math.max(0.15, 1 - wd / (m.weeklyMin || 120));
@@ -308,11 +310,11 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
 
   let slots = freeSlots(fixed, round5(nowMin));
   /** First start at or after notBefore that fits, avoiding forbidden windows. Does not reserve it. */
-  const find = (len: number, notBefore = 0, forbid: [number, number][] = []): { i: number; a: number } | null => {
+  const find = (len: number, notBefore = 0, forbid: [number, number][] = [], notAfter = 1e9): { i: number; a: number } | null => {
     for (let i = 0; i < slots.length; i++) {
       let a = Math.max(slots[i][0], notBefore);
       for (let moved = true; moved;) { moved = false; for (const [f0, f1] of forbid) if (a < f1 && f0 < a + len) { a = f1; moved = true; } }
-      if (slots[i][1] - a >= len) return { i, a };
+      if (slots[i][1] - a >= len && a + len <= notAfter) return { i, a };
     }
     return null;
   };
@@ -369,7 +371,6 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
 
   const day = fc.days[0];
   const gap = s.settings.mealGap;
-  const meals: [number, number][] = fixed.filter((b) => b.kind === 'meal').map((b) => [b.start, b.end + gap]);
   // Learned patterns, used only once they're confident.
   const avoid = new Map<string, Set<string>>();
   for (const a of afterStats(s)) if (a.worse) (avoid.get(a.energy) || avoid.set(a.energy, new Set()).get(a.energy)!).add(a.after);
@@ -383,15 +384,20 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   const order = [...day.blocks].sort((a, b) => Number(!!b.habit) - Number(!!a.habit) || Number(!!b.clock) - Number(!!a.clock));
   for (const a of order) {
     const m = byId.get(a.missionId); if (!m) continue;
-    const forbid = m.workout ? [...meals] : [];
+    const gapM = m.mealGap ?? gap;
+    const forbid: [number, number][] = m.workout ? fixed.filter((b) => b.kind === 'meal').map((b) => [b.start, b.end + gapM] as [number, number]) : [];
+    // daylight-only (sunrise to sunset) and errand windows, travel included
+    let lo = 0, hi = 1e9;
+    if (m.daylight && s.settings.sun) { const [rise, set] = sunTimes(date, s.settings.sun.lat, s.settings.sun.lon); lo = Math.ceil(rise / 5) * 5; hi = Math.floor(set); }
+    if (m.window) { lo = Math.max(lo, m.window[0]); hi = Math.min(hi, m.window[1]); }
     const bad = !a.habit ? avoid.get(m.energy) : undefined;
     const soft: [number, number][] = [];
     if (bad) for (const it of items) { const c = catOf(it); if (c && bad.has(c)) soft.push([it.end, it.end + 45]); }
     let got: { i: number; a: number } | null = null;
     const prefs = !a.habit ? bestParts(s, m.energy) : null;
     for (const fb of soft.length ? [[...forbid, ...soft], forbid] : [forbid]) {
-      if (prefs) for (const part of prefs) { const g = find(a.min, PART_START[part], fb); if (g && g.a < PART_END[part]) { got = g; break; } }
-      got ||= find(a.min, 0, fb);
+      if (prefs) for (const part of prefs) { const g = find(a.min, Math.max(lo, PART_START[part]), fb, hi); if (g && g.a < PART_END[part]) { got = g; break; } }
+      got ||= find(a.min, lo, fb, hi);
       if (got) break;
     }
     if (!got) continue; // doesn't fit today: back to the pool, silently

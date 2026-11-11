@@ -225,3 +225,76 @@ describe('cooking for the family', () => {
     expect(cookMinutes(s, false)).toBe(45);
   });
 });
+
+describe('V1 features', () => {
+  const work = (s: State, d: string, min: number) => s.logs.push(log('course-lessons', d, '10:00', min));
+  it('sustainable capacity is the best day not followed by a crash', async () => {
+    const { sustainableCapacity } = await import('../src/model/learn');
+    const s = sample();
+    const plan: [string, number, number][] = [['2026-11-02', 3, 200], ['2026-11-03', 5, 400], ['2026-11-04', 2, 60], ['2026-11-05', 4, 300], ['2026-11-06', 3, 250]];
+    for (const [d, lv, m] of plan) { s.days[d] = { level: lv as any }; work(s, d, m); }
+    expect(sustainableCapacity(s, '2026-11-07')).toBe(300); // 400 was followed by a crash (60)
+  });
+  it('a push that pays off makes the next one bigger', async () => {
+    const { pushSize } = await import('../src/model/learn');
+    const s = sample();
+    const plan: [string, number, number][] = [['2026-11-02', 3, 200], ['2026-11-03', 3, 200], ['2026-11-04', 5, 400], ['2026-11-05', 3, 200], ['2026-11-06', 3, 200]];
+    for (const [d, lv, m] of plan) { s.days[d] = { level: lv as any }; work(s, d, m); }
+    const p = pushSize(s, '2026-11-07');
+    expect(p.pushes.length).toBe(1);
+    expect(p.pct).toBe(0.3);
+  });
+  it('biking to a commitment counts toward weekly exercise', async () => {
+    const { exerciseMinWeek } = await import('../src/model/learn');
+    const s = sample();
+    s.events.find((e) => e.id === 'appt')!.bike = true; // weekly, 30 min each way
+    expect(exerciseMinWeek(s, '2026-11-09')).toBe(60);
+  });
+  it('a daylight-only workout stays between sunrise and sunset', async () => {
+    const { sunTimes } = await import('../src/model/schedule');
+    const s = sample(); s.settings.sun = { lat: 40, lon: -75 };
+    const court = s.missions.find((m) => m.id === 'court')!; court.daylight = true; court.travel = 10;
+    s.days['2026-11-12'] = { level: 5 };
+    const now = at('2026-11-12T08:00');
+    const it = layoutDay(s, forecast(s, now), '2026-11-12', now).find((i) => i.missionId === 'court');
+    const [, set] = sunTimes('2026-11-12', 40, -75);
+    if (it) { expect(it.end).toBeLessThanOrEqual(set); expect(it.end - it.start).toBe(65); }
+  });
+  it('an errand lands inside its window on a good day only', () => {
+    const s = sample();
+    s.missions.push({ id: 'err', objectiveId: '', title: 'Errand', kind: 'work', energy: 'none', minutes: 15, minLevel: 3, unitsLeft: 1, unitsTotal: 1, maxBlockUnits: 1, errand: true, travel: 10, window: [600, 1020] });
+    s.days['2026-11-12'] = { level: 2 };
+    let fc = forecast(s, at('2026-11-12T08:00'));
+    expect(fc.days[0].blocks.some((b) => b.missionId === 'err')).toBe(false);
+    s.days['2026-11-12'] = { level: 4 }; s.updatedAt = Math.random();
+    const now = at('2026-11-12T08:00');
+    fc = forecast(s, now);
+    const it = layoutDay(s, fc, '2026-11-12', now).find((i) => i.missionId === 'err');
+    expect(it).toBeTruthy();
+    expect(it!.start).toBeGreaterThanOrEqual(600);
+    expect(it!.end).toBeLessThanOrEqual(1020);
+  });
+  it('a backup week turns the rest day into a work day', async () => {
+    const { isRest } = await import('../src/model/schedule');
+    const s = sample();
+    expect(isRest(s, '2026-11-15')).toBe(true);
+    s.settings.backupWeeks = ['2026-11-09'];
+    expect(isRest(s, '2026-11-15')).toBe(false);
+  });
+  it('learns the usual dinner time from Dinner now taps', async () => {
+    const { learnedDinner } = await import('../src/model/schedule');
+    const s = sample();
+    for (const [d, m] of [['2026-10-29', 1080], ['2026-11-05', 1090], ['2026-10-22', 1100]] as const) s.days[d] = { dinnerTap: m };
+    expect(learnedDinner(s, '2026-11-12')).toBe(1090);
+  });
+  it('stopping partway counts the ticked steps', async () => {
+    const { actions, S, adopt } = await import('../src/model/store');
+    const s = sample();
+    const m = s.missions.find((x) => x.id === 'exam-steps')!; m.labels = Array.from({ length: 12 }, (_, i) => `Ch|lesson ${i + 1}`);
+    adopt(s);
+    actions.start('exam-steps', 3, 90);
+    actions.tick(2);
+    actions.finish(false);
+    expect(S().missions.find((x) => x.id === 'exam-steps')!.unitsLeft).toBe(10);
+  });
+});

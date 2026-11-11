@@ -3,7 +3,7 @@ import { achievements, heroLevel, xpOf } from '../model/game';
 import { Choice } from './Choice';
 import type { Library } from '../model/vm';
 import { addDays, dateOf, fmtDate, fmtDay, fmtDur, fmtT, nowTs, weekStart } from '../model/time';
-import { afterStats, morningStats, choreDue, choreInterval, choreLast, contextStats, crashAfter5, exerciseCeiling, factor, flareStats, followThrough, learnedCapacity } from '../model/learn';
+import { afterStats, morningStats, pushSize, sustainableCapacity, weekdayFactor, choreDue, choreInterval, choreLast, contextStats, crashAfter5, exerciseCeiling, factor, flareStats, followThrough, learnedCapacity } from '../model/learn';
 import { eventsOn } from '../model/schedule';
 import { levelName, nice } from '../model/seed';
 import { fromHM, toHM } from './bits';
@@ -48,6 +48,11 @@ export function Debrief({ lib }: { lib: Library }) {
   if (crash.confident) learned.push(`The day after Plus Ultra averages level ${crash.after.toFixed(1)}. Those days are now planned light.`);
   if (ft.n >= 10) learned.push(`${Math.round(ft.rate * 100)}% of started work gets finished in one go.`);
   for (const c of ctx) if (c.rate <= 0.6 || c.rate >= 0.9) learned.push(`${c.energy[0].toUpperCase() + c.energy.slice(1)} work in the ${c.part.toLowerCase()} gets finished ${Math.round(c.rate * 100)}% of the time.${c.n >= 8 ? ' Plans now lean toward your better times.' : ''}`);
+  const sus = sustainableCapacity(s, today), push = pushSize(s, today);
+  if (sus !== null) learned.push(`Sustainable capacity: about ${fmtDur(sus)} of focused work a day (your best recent day that wasn't followed by a crash). Active days plan to it; Plus Ultra plans ${Math.round(push.pct * 100)}% past it.`);
+  for (const p of push.pushes.slice(-3)) learned.push(`Push ${fmtDate(p.start)}${p.end !== p.start ? ` to ${fmtDate(p.end)}` : ''} (${p.days} days with the dial-back): ${p.net >= 0 ? 'came out ahead' : 'came out behind'} by ${fmtDur(Math.abs(p.net))} vs. staying at capacity, so the next push is ${p.net >= 0 ? 'a bit bigger' : 'a bit smaller'}.`);
+  const WDN = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
+  for (let w = 0; w < 7; w++) { const f = weekdayFactor(s, today, w); if (Math.abs(f - 1) >= 0.15) learned.push(`${WDN[w]} usually get ${f > 1 ? 'more' : 'less'} done (about ${Math.round(Math.abs(f - 1) * 100)}% ${f > 1 ? 'above' : 'below'} average). Future ${WDN[w]} are planned to match.`); }
   const ms = morningStats(s);
   if (ms) learned.push(`You're usually ready for the day by about ${fmtT(ms.readyAt)}${ms.span ? `, about ${ms.span} min after reporting in` : ''} (last ${ms.n} mornings).`);
   const plannable = new Set(['shift', 'workout', 'event', 'physical', 'mental', 'social']);
@@ -129,6 +134,7 @@ export function Settings() {
         ))}
       </div>
       <Chores />
+      <Errands />
       <div class="card narrow">
         <h2>PLANNING</h2>
         <p>Deadlines are planned against a modest day, so good days build a buffer and bad days spend it.</p>
@@ -240,6 +246,26 @@ function SendFiles() {
       </div>
       {msg && <p class="soft" role="status" style="font-size:14px">{msg}</p>}
       {sent.length > 0 && <ul>{sent.map((x) => <li>{x.name}: {x.pages} pages{x.blank ? `, ${x.blank} without text (scans)` : ''}</li>)}</ul>}
+    </div>
+  );
+}
+
+function Errands() {
+  const s = S(), list = s.missions.filter((m) => m.errand && !m.archived && (m.unitsLeft ?? 0) > 0);
+  if (!list.length) return null;
+  return (
+    <div class="card narrow">
+      <h2>ERRANDS</h2>
+      <p class="soft" style="font-size:14px">Planned on the next On Duty day or better that has room.</p>
+      {list.map((m) => (
+        <div class="row" style="justify-content:space-between">
+          <p><b>{m.title}</b>{m.window ? ` · ${fmtT(m.window[0])} to ${fmtT(m.window[1])}` : ''}</p>
+          <div class="row">
+            <button type="button" class="small" onClick={() => setLocal({ sheet: 'mission', sheetArg: m.id })}>Edit</button>
+            <button type="button" class="small" onClick={() => actions.saveMission({ ...m, archived: true })}>Remove</button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

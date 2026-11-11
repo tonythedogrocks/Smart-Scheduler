@@ -34,6 +34,14 @@ export interface Mission {
   clock?: boolean; waitDays?: number; // finishing starts a waiting period
   workout?: boolean;       // respects meal gaps, eases when flares spike
   restOk?: boolean;        // still runs on the weekly rest day
+  travel?: number;         // minutes each way (walk or bike) added around the block
+  bike?: boolean;          // that travel is by bike: counts toward weekly exercise
+  daylight?: boolean;      // only between sunrise and sunset
+  mealGap?: number;        // minutes to wait after a meal (workouts), overriding the setting
+  window?: [number, number]; // earliest start and latest finish, travel included (minutes from midnight)
+  errand?: boolean;        // one-off errand: planned on good days, then gone
+  days?: number[];         // habit: only on these weekdays
+  notFloor?: boolean;      // habit that isn't part of the day's floor
   form?: 'measure';
   steps?: { at: number; min: number; title: string }[]; // chore: hands-on moments, minutes from the start; must be home for each
   lastAt?: string;         // chore: last done before the app knew
@@ -55,6 +63,7 @@ export interface Evt {
   exerciseMin?: number;
   choices?: number[];      // start times to pick between, week by week
   shiftGap?: number;       // minutes needed between a shift ending and this starting
+  bike?: boolean;          // travel is by bike: counts toward weekly exercise
   skip?: string[];
 }
 
@@ -65,7 +74,7 @@ export interface Log {
   plannedMin: number; units: number; done: boolean; level?: Level; xp?: number; step?: number;
 }
 
-export interface DayRec { t?: number; level?: Level; setAt?: number; floorAwarded?: boolean; lunchAt?: number; dinnerAt?: number; starts?: Record<string, number>; cook?: boolean | 'family'; cookStart?: number; cookEnd?: number; morningEnd?: number }
+export interface DayRec { t?: number; level?: Level; setAt?: number; floorAwarded?: boolean; lunchAt?: number; dinnerAt?: number; starts?: Record<string, number>; cook?: boolean | 'family'; cookStart?: number; cookEnd?: number; morningEnd?: number; dinnerTap?: number }
 
 export interface Settings {
   wake: number; morningMin: number; bedPrep: number; offDutyMin: number;
@@ -80,7 +89,9 @@ export interface Settings {
   cookMin: number;          // first guess for cooking dinner for himself; learned from real runs
   cookFamilyMin: number;    // first guess for cooking for the family; learned separately
   flareLabel: string;
-  shift: { title: string; travel: number; lengths: number[] };
+  shift: { title: string; travel: number; lengths: number[]; bike?: boolean };
+  backupWeeks: string[];    // weeks (Monday dates) where the rest day is a backup work day
+  sun?: { lat: number; lon: number }; // for sunrise/sunset (daylight-only missions)
   workoutTitle: string;
   acronyms: string[];       // words kept in capitals in titles
   exStart: number; exTop: number; exGrowth: number; // weekly exercise ceiling: start, top, growth per good week
@@ -89,7 +100,7 @@ export interface Settings {
 
 export interface AchDef { id: string; t?: number; title: string; sub: string; objectiveId?: string; missionId?: string; count?: number; manual?: boolean }
 
-export interface Running { missionId: string; units: number; plannedMin: number; startedAt: number; step?: number }
+export interface Running { missionId: string; units: number; plannedMin: number; startedAt: number; step?: number; ticked?: number }
 
 export interface State {
   v: 1;

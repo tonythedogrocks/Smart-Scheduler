@@ -38,6 +38,7 @@ const DOING = ['Gaming', 'Break', 'Phone', 'Eating', 'Chores', 'Out and about', 
 function Doing() {
   return (
     <Sheet title="DOING NOW">
+      {new Date(nowTs()).getHours() >= 15 && <button type="button" class="big go sm" onClick={() => { actions.dinnerNow(); setLocal({ sheet: null }); }}>DINNER NOW</button>}
       <div class="grid2">{DOING.map((d) => <button type="button" onClick={() => { actions.doing(d); setLocal({ sheet: null }); }}>{d}</button>)}</div>
     </Sheet>
   );
@@ -45,7 +46,7 @@ function Doing() {
 
 function Add() {
   const arg = L().sheetArg || '';
-  const [kind, setKind] = useState<'shift' | 'workout' | 'event' | 'cooking' | 'objective'>(arg.startsWith('objective') ? 'objective' : 'shift');
+  const [kind, setKind] = useState<'shift' | 'workout' | 'event' | 'cooking' | 'errand' | 'objective'>(arg.startsWith('objective') ? 'objective' : 'shift');
   const today = dateOf(nowTs());
   const [date, setDate] = useState(today);
   const [start, setStart] = useState('10:00');
@@ -55,6 +56,11 @@ function Add() {
   const [travel, setTravel] = useState(20);
   const [title, setTitle] = useState('');
   const [forFamily, setForFamily] = useState(true);
+  const [onSite, setOnSite] = useState(15);
+  const [bike, setBike] = useState(true);
+  const [evBike, setEvBike] = useState(false);
+  const [after, setAfter] = useState('10:00');
+  const [by, setBy] = useState('17:00');
   const [repeat, setRepeat] = useState<'once' | 'weekly' | 'some'>('once');
   const [weeks, setWeeks] = useState<number[]>([]);
   const [skill, setSkill] = useState(arg.split(':')[1] || S().skills[0]?.id || '');
@@ -78,6 +84,17 @@ function Add() {
       close(); go({ view: 'toc', c: skill, i: id, ch: 0, p: '' });
       return;
     }
+    if (kind === 'errand') {
+      if (!title.trim()) return;
+      const lo = fromHM(after), hi = fromHM(by);
+      if (hi - lo < onSite + 2 * travel) return;
+      actions.saveMission({ id: uid(), objectiveId: '', title: title.trim(), kind: 'work', energy: 'none', minutes: onSite, minLevel: 3,
+        unitsLeft: 1, unitsTotal: 1, maxBlockUnits: 1, errand: true, travel, bike, window: [lo, hi],
+        note: `${travel ? `${travel} min ${bike ? 'bike' : 'travel'} each way. ` : ''}Planned on an On Duty day or better, between ${fmtT(lo)} and ${fmtT(hi)}.` });
+      toast('Errand added');
+      close();
+      return;
+    }
     if (kind === 'cooking') {
       actions.setDay(date, { cook: forFamily ? 'family' : true });
       toast(forFamily ? 'Cooking for the family added' : 'Cooking added');
@@ -86,14 +103,28 @@ function Add() {
     }
     if (en <= st) return;
     const t = kind === 'shift' ? cfg.shift.title : kind === 'workout' ? cfg.workoutTitle : title.trim() || 'Event';
-    actions.addEvent({ title: t, kind, start: st, end: en, travel: tr, ...(kind === 'event' && repeat !== 'once' ? { weekday: weekday(date), ...(repeat === 'some' && weeks.length ? { nth: [...weeks].sort() } : {}) } : { date }) });
+    actions.addEvent({ title: t, kind, start: st, end: en, travel: tr, ...(kind !== 'shift' && evBike && tr ? { bike: true } : {}), ...(kind === 'event' && repeat !== 'once' ? { weekday: weekday(date), ...(repeat === 'some' && weeks.length ? { nth: [...weeks].sort() } : {}) } : { date }) });
     toast(`${t} added`);
     close();
   };
   return (
     <Sheet title="ADD">
-      <div class="row">{(['shift', 'workout', 'event', 'cooking', 'objective'] as const).filter((k) => k !== 'objective' || S().skills.length).map((k) => <button type="button" class={`small ${kind === k ? 'on' : ''}`} onClick={() => setKind(k)}>{k === 'workout' ? cfg.workoutTitle : k === 'shift' ? cfg.shift.title : k[0].toUpperCase() + k.slice(1)}</button>)}</div>
-      {kind === 'cooking' ? (
+      <div class="row">{(['shift', 'workout', 'event', 'cooking', 'errand', 'objective'] as const).filter((k) => k !== 'objective' || S().skills.length).map((k) => <button type="button" class={`small ${kind === k ? 'on' : ''}`} onClick={() => setKind(k)}>{k === 'workout' ? cfg.workoutTitle : k === 'shift' ? cfg.shift.title : k[0].toUpperCase() + k.slice(1)}</button>)}</div>
+      {kind === 'errand' ? (
+        <>
+          <label class="field">Errand<input value={title} onInput={(e) => setTitle(val(e))} placeholder="Return a library book, pick up a package..." /></label>
+          <div class="row">
+            <label class="field">Minutes there<input inputMode="numeric" value={String(onSite)} onInput={(e) => setOnSite(Math.max(1, +val(e) || 0))} /></label>
+            <label class="field">Travel each way (min)<input inputMode="numeric" value={String(travel)} onInput={(e) => setTravel(Math.max(0, +val(e) || 0))} /></label>
+          </div>
+          <label class="check"><input type="checkbox" checked={bike} onChange={(e) => setBike((e.target as HTMLInputElement).checked)} />Biking there (counts as exercise)</label>
+          <div class="row">
+            <label class="field">Not before<input type="time" value={after} onInput={(e) => setAfter(val(e))} /></label>
+            <label class="field">Home by<input type="time" value={by} onInput={(e) => setBy(val(e))} /></label>
+          </div>
+          <span class="soft" style="font-size:14px">It goes on the next On Duty day or better that has room, then it's gone.</span>
+        </>
+      ) : kind === 'cooking' ? (
         <>
           <label class="field">Day<input type="date" value={date} onInput={(e) => setDate(val(e))} /></label>
           <div class="row">
@@ -128,6 +159,7 @@ function Add() {
           {kind === 'shift'
             ? <span class="soft" style="font-size:14px">{cfg.shift.travel ? `${cfg.shift.travel} min travel each way is added automatically. ` : ''}Ends {fmtT(en)}.</span>
             : <label class="field" style="max-width:200px">Travel each way (min)<input inputMode="numeric" value={String(travel)} onInput={(e) => setTravel(Math.max(0, +val(e) || 0))} /></label>}
+          {kind !== 'shift' && <label class="check"><input type="checkbox" checked={evBike} onChange={(e) => setEvBike((e.target as HTMLInputElement).checked)} />Biking there (counts as exercise)</label>}
           {kind === 'event' && (
             <>
               <div class="row">

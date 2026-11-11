@@ -105,6 +105,14 @@ export function flareSpike(s: State, now: number): boolean {
   return recent.length >= 2 || recent.some((f) => (f.rating ?? 0) >= 7 && f.ts > now - 2 * 86400000);
 }
 
+/** Minutes it really takes to cook dinner: the setting until 2 real runs, then the recent average. */
+export function cookMinutes(s: State): number {
+  const runs = Object.values(s.days).filter((d) => d.cookStart && d.cookEnd && d.cookEnd > d.cookStart).map((d) => (d.cookEnd! - d.cookStart!) / 60000).filter((m) => m >= 5 && m <= 240);
+  if (runs.length < 2) return s.settings.cookMin;
+  const recent = runs.slice(-6);
+  return Math.round(recent.reduce((a, b) => a + b, 0) / recent.length / 5) * 5;
+}
+
 /** Missions that count toward weekly exercise. Daily base routines (habits) never do. */
 export const isExercise = (m?: Mission) => !!m && m.kind !== 'habit' && m.kind !== 'chore' && (!!m.workout || m.energy === 'physical');
 

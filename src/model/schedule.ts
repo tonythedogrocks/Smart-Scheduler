@@ -1,5 +1,6 @@
 import type { State, Evt } from './types';
 import { addDays, dateOf, minsOf, parseD, weekday } from './time';
+import { cookMinutes } from './learn';
 
 export interface Block {
   key: string; start: number; end: number; title: string; sub?: string;
@@ -79,7 +80,17 @@ export function fixedBlocks(s: State, date: string): Block[] {
   };
   const day = s.days[date] || {};
   const lunchEnd = place('lunch', day.lunchAt ?? st.lunchAt, st.lunchMin, 660, 870);
-  const dinnerEnd = place('dinner', day.dinnerAt ?? st.dinnerAt, st.dinnerMin, 1020, 1230);
+  // Cooking: a block right before dinner that turns into dinner when it's done.
+  let dinnerWant = day.dinnerAt ?? st.dinnerAt;
+  const cookLen = cookMinutes(s);
+  if (day.cook) {
+    const cs = day.cookStart !== undefined ? minsOf(day.cookStart) : dinnerWant - cookLen;
+    const ce = day.cookEnd !== undefined ? minsOf(day.cookEnd) : cs + cookLen;
+    dinnerWant = ce;
+    out.push({ key: 'f:cook', start: cs, end: ce, title: 'Cooking dinner', sub: day.cookEnd ? `${Math.round(ce - cs)} min` : `about ${cookLen} min · dinner right after`, kind: 'routine', blocking: true });
+    busy.push([cs, ce]);
+  }
+  const dinnerEnd = place('dinner', dinnerWant, st.dinnerMin, 1020, 1230);
   const wd = weekday(date);
   if (st.dishDays.includes(wd)) {
     if (lunchEnd > 0) out.push({ key: 'f:dishes1', start: lunchEnd, end: lunchEnd + st.dishesMin, title: 'Dishes', sub: 'After lunch · 15 to 30 min', kind: 'routine', blocking: true });

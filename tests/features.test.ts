@@ -163,3 +163,26 @@ describe('starting the day', () => {
     expect(lunch.start).toBeGreaterThanOrEqual(morning.end);
   });
 });
+
+describe('cooking dinner', () => {
+  it('puts cooking right before dinner, then dinner starts when cooking is done', async () => {
+    const { fixedBlocks } = await import('../src/model/schedule');
+    const s = sample();
+    s.days['2026-11-12'] = { cook: true };
+    let b = fixedBlocks(s, '2026-11-12');
+    const cook = b.find((x) => x.key === 'f:cook')!, dinner = b.find((x) => x.key === 'f:dinner')!;
+    expect(cook.end).toBe(dinner.start);
+    expect(cook.end - cook.start).toBe(45);
+    s.days['2026-11-12'] = { cook: true, cookStart: at('2026-11-12T17:10'), cookEnd: at('2026-11-12T18:05'), dinnerAt: 18 * 60 + 5 };
+    b = fixedBlocks(s, '2026-11-12');
+    expect(b.find((x) => x.key === 'f:dinner')!.start).toBe(18 * 60 + 5);
+  });
+  it('learns how long cooking really takes', async () => {
+    const { cookMinutes } = await import('../src/model/learn');
+    const s = sample();
+    s.days['2026-11-01'] = { cook: true, cookStart: at('2026-11-01T17:00'), cookEnd: at('2026-11-01T18:00') };
+    expect(cookMinutes(s)).toBe(45);
+    s.days['2026-11-02'] = { cook: true, cookStart: at('2026-11-02T17:00'), cookEnd: at('2026-11-02T18:10') };
+    expect(cookMinutes(s)).toBe(65);
+  });
+});

@@ -23,7 +23,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lunchAt: 750, lunchMin: 30, dinnerAt: 1110, dinnerMin: 30, dishesMin: 20,
   mealGap: 90, breakMin: 10, baseline: 2.5,
   capacity: { 1: 0, 2: 45, 3: 210, 4: 330, 5: 450 },
-  restDay: null, restDayName: 'Rest day', dishDays: [], dinnerNote: '', heightIn: 70,
+  restDay: null, restDayName: 'Rest day', dishDays: [], dinnerNote: '', heightIn: 70, cookMin: 45,
   flareLabel: 'Flare', shift: { title: 'Shift', travel: 0, lengths: [240, 480] }, workoutTitle: 'Workout',
   exStart: 150, exTop: 450, exGrowth: 0.1,
   acronyms: [], north: { kicker: 'LIMIT BREAK:', title: 'YOUR GOAL!', sub: '', date: '', toWhat: 'go' },

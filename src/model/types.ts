@@ -65,7 +65,7 @@ export interface Log {
   plannedMin: number; units: number; done: boolean; level?: Level; xp?: number; step?: number;
 }
 
-export interface DayRec { t?: number; level?: Level; setAt?: number; floorAwarded?: boolean; lunchAt?: number; dinnerAt?: number; starts?: Record<string, number> }
+export interface DayRec { t?: number; level?: Level; setAt?: number; floorAwarded?: boolean; lunchAt?: number; dinnerAt?: number; starts?: Record<string, number>; cook?: boolean; cookStart?: number; cookEnd?: number }
 
 export interface Settings {
   wake: number; morningMin: number; bedPrep: number; offDutyMin: number;
@@ -77,6 +77,7 @@ export interface Settings {
   dishDays: number[];       // weekdays with dishes after lunch and dinner
   dinnerNote: string;
   heightIn: number;         // for the tape-measure body fat estimate
+  cookMin: number;          // first guess for cooking dinner; learned from real runs
   flareLabel: string;
   shift: { title: string; travel: number; lengths: number[] };
   workoutTitle: string;

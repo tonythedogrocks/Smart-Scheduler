@@ -77,6 +77,23 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
             )}
           </>
         )}
+        {p.act === 'meal' && p.meal === 'dinner' && p.date && p.date >= lib.today && !day.cook && (
+          <button type="button" class="small on" style="align-self:flex-start" onClick={() => actions.setDay(p.date!, { cook: true })}>I'm cooking tonight</button>
+        )}
+        {p.act === 'cook' && p.date && (
+          day.cookEnd ? <span class="caption" style="align-self:flex-start;font-size:17px">COOKED. DINNER'S ON.</span>
+          : day.cookStart ? (
+            <>
+              <span class="caption" style="align-self:flex-start;font-size:17px;transform:rotate(-1.5deg)">COOKING... {fmtDur(Math.max(0, (nowTs() - day.cookStart) / 60000))}</span>
+              <button type="button" class="big fin" onClick={() => { const t = nowTs(); actions.setDay(p.date!, { cookEnd: t, dinnerAt: Math.round(new Date(t).getHours() * 60 + new Date(t).getMinutes()) }); }}>DONE!</button>
+            </>
+          ) : (
+            <>
+              {p.date === lib.today && <button type="button" class="big go" onClick={() => actions.setDay(p.date!, { cookStart: nowTs() })}>START!</button>}
+              <button type="button" class="plain" onClick={() => actions.setDay(p.date!, { cook: false })}>Not cooking after all</button>
+            </>
+          )
+        )}
         {p.act === 'meal' && p.date && p.date >= lib.today && (
           <div class="row">
             <span style="font-size:15px">Move it:</span>

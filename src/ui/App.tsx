@@ -36,7 +36,8 @@ export function App() {
   const col = lib.cols.find((c) => c.key === nav.c) || lib.cols[0];
   const issue = col.issues.find((i) => i.key === nav.i) || (col.key === 'week' ? col.issues.find((i) => i.key === today) : undefined) || col.issues[0];
   const chapter = issue?.chapters[nav.ch] || issue?.chapters[0];
-  const panel = chapter?.panels.find((p) => p.key === nav.p) || chapter?.panels[0];
+  // a panel can move to another part of the day as plans shift: find it wherever it went
+  const panel = chapter?.panels.find((p) => p.key === nav.p) || issue?.chapters.flatMap((c) => c.panels).find((p) => p.key === nav.p) || chapter?.panels[0];
   let view = nav.view;
   if (!issue && (view === 'toc' || view === 'page' || view === 'panel')) view = 'col';
   const anim = nav.dir === 'out' ? 'lbZoomOut' : IN[view];

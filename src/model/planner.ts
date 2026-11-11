@@ -126,6 +126,17 @@ export function forecast(s: State, now: number): Forecast {
     tailMemo.set(m.id, v);
     return v;
   };
+  // Minutes still to do in missions that wait on this one (same Objective), so pace covers the whole chain.
+  const downstream = (m: Mission, seen = new Set<string>()): number => {
+    let t = 0;
+    for (const x of live) {
+      if (seen.has(x.id) || x.kind !== 'work' || x.objectiveId !== m.objectiveId) continue;
+      if (!(x.after || []).includes(m.id) && !(x.afterNoWait || []).includes(m.id)) continue;
+      seen.add(x.id);
+      t += (units.get(x.id) || 0) * x.minutes * f.get(x.id)! + downstream(x, seen);
+    }
+    return t;
+  };
   const objLeft = (oid: string) => live.filter((m) => m.objectiveId === oid && m.kind === 'work').reduce((a, m) => a + (units.get(m.id) || 0) * m.minutes * f.get(m.id)!, 0);
 
   const days: DayAlloc[] = [];
@@ -163,7 +174,9 @@ export function forecast(s: State, now: number): Forecast {
       const o = s.objectives.find((x) => x.id === m.objectiveId);
       if (!o?.due || o.done) continue;
       const dueIn = diffDays(date, o.due) - tail(m);
-      need.set(m.id, { min: ((units.get(m.id) || 0) * m.minutes * f.get(m.id)!) / Math.max(1, dueIn), dueIn });
+      // pace for this mission and everything waiting on it in the same Objective
+      const own = (units.get(m.id) || 0) * m.minutes * f.get(m.id)!;
+      need.set(m.id, { min: Math.min(own, (own + downstream(m)) / Math.max(1, dueIn)), dueIn });
     }
     for (let guard = 0; guard < 40 && cap >= 10; guard++) {
       let best: { m: Mission; score: number; u: number; min: number } | null = null;

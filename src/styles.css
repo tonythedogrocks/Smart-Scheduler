@@ -86,6 +86,19 @@ box-shadow:5px 5px 0 -3px #fff,5px 5px 0 0 var(--ink),10px 10px 0 -3px #fff,10px
 .burst{align-self:center;width:270px;height:130px;background:var(--ink);display:flex;align-items:center;justify-content:center;animation:lbPop 420ms cubic-bezier(.2,.9,.25,1) both}
 .burst,.burst div{clip-path:polygon(50% 0%,59% 14%,74% 5%,76% 21%,93% 18%,88% 34%,100% 43%,89% 54%,97% 69%,81% 71%,80% 88%,65% 82%,56% 100%,46% 85%,32% 96%,29% 80%,12% 84%,16% 67%,0% 60%,11% 48%,2% 34%,18% 31%,17% 14%,33% 18%,40% 3%)}
 .burst div{width:256px;height:116px;background:var(--yellow);display:flex;align-items:center;justify-content:center;text-align:center;font-family:var(--display);font-size:26px;line-height:.95;letter-spacing:.04em}
+/* day timeline */
+.tl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.tl li{display:grid;grid-template-columns:4.4rem 1fr;gap:10px;align-items:start}
+.tl-time{font-family:var(--display);font-size:16px;letter-spacing:.03em;padding-top:8px;line-height:1.1}
+.tl-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:100%;min-height:52px;padding:8px 12px;border:3px solid var(--ink);border-radius:2px;background:#fff;text-align:left;box-shadow:3px 3px 0 var(--ink)}
+.tl-card.fixed{background:var(--paper);box-shadow:none;border-style:dashed;min-height:44px}
+.tl-kick{font-family:var(--display);font-size:13px;letter-spacing:.06em;color:var(--soft)}
+.tl-t{font-size:16px;line-height:1.2;overflow-wrap:anywhere;padding-right:56px}
+.tl-m{font-size:13px;line-height:1.25;color:var(--soft);overflow-wrap:anywhere}
+.tl .is-now .tl-card{background:var(--yellow);box-shadow:5px 5px 0 var(--ink);border-style:solid}
+.tl .is-now .tl-time{color:var(--red)}
+.tl .is-done .tl-card{background:var(--done);box-shadow:none}
+.tl .is-done .tl-t{color:var(--soft)}
 /* status report */
 .status{gap:18px;overflow-y:auto}
 .status h1{font-family:var(--display);font-weight:400;font-size:50px;line-height:.95;letter-spacing:.03em;color:var(--red);text-shadow:3px 3px 0 var(--ink)}

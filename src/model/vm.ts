@@ -7,6 +7,7 @@ import { eventsOn, isBackupDay, isRest } from './schedule';
 
 export interface PanelVM {
   key: string; h: string; t: string; m?: string; d?: string; wide?: boolean;
+  time?: string; kick?: string; color?: string; fixed?: boolean;
   now?: boolean; done?: boolean; running?: boolean; alert?: boolean;
   missionId?: string; units?: number; baseMin?: number; min?: number; step?: number;
   act?: 'mission' | 'meal' | 'cook' | 'morning' | 'backup' | 'choice' | 'event' | 'objective' | 'info';
@@ -21,12 +22,14 @@ const CH = ['MORNING', 'MIDDAY', 'AFTERNOON', 'EVENING'];
 
 function itemPanel(s: State, it: PlanItem, date: string, isToday: boolean): PanelVM {
   const b = it.block;
+  const time = it.end > it.start ? `${fmtT(it.start)}–${fmtT(it.end)}` : fmtT(it.start);
   if (it.kind === 'mission') {
-    return { key: it.key, h: it.now && !it.running ? 'NOW' : fmtT(it.start), t: it.title, m: it.sub, d: it.detail, now: it.now, done: it.done, running: it.running, missionId: it.missionId, units: it.units, baseMin: it.baseMin, min: it.min, step: it.step, editable: s.missions.find((m) => m.id === it.missionId)?.kind === 'chore', act: 'mission', wide: it.now || (it.min || 0) >= 60, date };
+    const mi = s.missions.find((m) => m.id === it.missionId), ob = s.objectives.find((o) => o.id === mi?.objectiveId), sk = s.skills.find((k) => k.id === ob?.skillId);
+    return { time, kick: sk ? nice(sk.title) : mi?.kind === 'chore' ? 'Chore' : mi?.errand ? 'Errand' : undefined, color: sk?.bg, key: it.key, h: it.now && !it.running ? 'NOW' : fmtT(it.start), t: it.title, m: it.sub, d: it.detail, now: it.now, done: it.done, running: it.running, missionId: it.missionId, units: it.units, baseMin: it.baseMin, min: it.min, step: it.step, editable: s.missions.find((m) => m.id === it.missionId)?.kind === 'chore', act: 'mission', wide: it.now || (it.min || 0) >= 60, date };
   }
   const h = b!.kind === 'note' ? (b!.meal === 'lunch' ? 'LUNCH' : 'DINNER') : it.now && isToday ? 'NOW' : fmtT(it.start);
   return {
-    key: it.key, h, t: it.title, m: it.sub, done: it.past && isToday, now: it.now, date,
+    time, fixed: true, key: it.key, h, t: it.title, m: it.sub, done: it.past && isToday, now: it.now, date,
     act: b!.key === 'f:cook' ? 'cook' : b!.key === 'f:morning' ? 'morning' : b!.kind === 'meal' || b!.kind === 'note' ? 'meal' : b!.evtId ? (s.events.find((e) => e.id === b!.evtId)?.choices && b!.kind === 'event' ? 'choice' : 'event') : 'info',
     evtId: b!.evtId, meal: b!.meal, wide: b!.kind === 'event',
     d: b!.kind === 'offduty' ? 'Rest counts. It feeds tomorrow.' : undefined,

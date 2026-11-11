@@ -44,10 +44,11 @@ export function App() {
   const style = (ms = 420) => `animation:${anim} ${ms}ms cubic-bezier(.2,.9,.25,1) both`;
   const lv = s.days[today]?.level;
   const hero = heroLevel(xpOf(s));
-  const backLabel: Record<string, string> = { col: 'SHELF', toc: col.title.length > 12 ? 'COLLECTION' : col.title, page: 'CONTENTS', panel: 'PAGE', debrief: 'SHELF', settings: 'SHELF', achievements: 'SHELF' };
-  const back = () => go({ view: BACK[view] || 'shelf', dir: 'out' });
+  const backLabel: Record<string, string> = { col: 'SHELF', toc: col.title.length > 12 ? 'COLLECTION' : col.title, page: 'CONTENTS', panel: nav.c === 'week' ? 'DAY' : 'PAGE', debrief: 'SHELF', settings: 'SHELF', achievements: 'SHELF' };
+  const backTo = (v: Nav['view']) => (v === 'panel' && nav.c === 'week' ? 'toc' : BACK[v] || 'shelf');
+  const back = () => go({ view: backTo(view), dir: 'out' });
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { if (L().sheet) setLocal({ sheet: null }); else if (L().nav.view !== 'shelf') go({ view: BACK[L().nav.view] || 'shelf', dir: 'out' }); } };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { if (L().sheet) setLocal({ sheet: null }); else if (L().nav.view !== 'shelf') go({ view: L().nav.view === 'panel' && L().nav.c === 'week' ? 'toc' : BACK[L().nav.view] || 'shelf', dir: 'out' }); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
@@ -158,7 +159,30 @@ export function App() {
           </div>
         )}
 
-        {view === 'toc' && issue && (
+        {view === 'toc' && issue && col.key === 'week' && (
+          <div class="book" style={style(460)}>
+            <div class="head">
+              <span class="k">{col.title} · No. {col.issues.indexOf(issue) + 1}</span>
+              <h1>{issue.title}</h1>
+              <span class="soft" style="font-size:14px">{issue.sub}</span>
+            </div>
+            <ol class="tl">
+              {issue.chapters.flatMap((ch, ci) => ch.panels.map((p) => ({ p, ci }))).map(({ p, ci }) => (
+                <li class={`${p.now ? 'is-now' : ''} ${p.done ? 'is-done' : ''}`}>
+                  <span class="tl-time">{p.time || p.h}</span>
+                  <button type="button" class={`tl-card ${p.fixed ? 'fixed' : ''}`} style={p.color && !p.done && !p.now ? `border-left:10px solid ${p.color}` : ''} onClick={() => go({ view: 'panel', ch: ci, p: p.key })}>
+                    {p.kick && <span class="tl-kick">{p.kick}</span>}
+                    <span class="tl-t">{p.t}</span>
+                    {p.m && <span class="tl-m">{p.m}</span>}
+                    {(p.done || p.now || p.running) && <span class="tag" style={`color:${p.done ? '#1B7A44' : '#B3231A'};border-color:${p.done ? '#1B7A44' : '#B3231A'}`}>{p.done ? 'DONE' : p.running ? 'GOING' : 'NOW!'}</span>}
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+
+        {view === 'toc' && issue && col.key !== 'week' && (
           <div class="book" style={style(460)}>
             <div class="head">
               <span class="k">{col.title} · No. {col.issues.indexOf(issue) + 1}</span>

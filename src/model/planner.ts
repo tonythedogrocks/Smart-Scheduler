@@ -276,8 +276,11 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   const fixed = fixedBlocks(s, date);
   const isToday = date === today;
   const nowMin = isToday ? minsOf(now) : date < today ? 1e9 : -1;
+  // Today the morning routine isn't over until he taps Done: it runs on to now, and nothing starts before it ends.
+  const morningOpen = isToday && !s.days[date]?.morningEnd;
+  if (morningOpen) { const mb = fixed.find((b) => b.key === 'f:morning'); if (mb && mb.end < round5(nowMin)) mb.end = round5(nowMin); }
   const byId = new Map(s.missions.map((m) => [m.id, m]));
-  const items: PlanItem[] = fixed.map((b) => ({ key: b.key, start: b.start, end: b.end, title: b.title, sub: b.sub, kind: 'fixed' as const, block: b, past: b.end <= nowMin && b.kind !== 'note' }));
+  const items: PlanItem[] = fixed.map((b) => ({ key: b.key, start: b.start, end: b.end, title: b.title, sub: b.sub, kind: 'fixed' as const, block: b, past: b.end <= nowMin && b.kind !== 'note' && !(morningOpen && b.key === 'f:morning') }));
   const occ = new Map<string, number>();
   const keyFor = (id: string) => { const n = occ.get(id) || 0; occ.set(id, n + 1); return `m:${id}:${n}`; };
   const level = s.days[date]?.level ?? fc.days.find((d) => d.date === date)?.level ?? 3;

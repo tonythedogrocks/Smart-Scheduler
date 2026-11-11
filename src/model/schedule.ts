@@ -1,6 +1,6 @@
 import type { State, Evt } from './types';
 import { addDays, dateOf, minsOf, parseD, weekday } from './time';
-import { cookMinutes, morningMinutes } from './learn';
+import { cookMinutes } from './learn';
 
 export interface Block {
   key: string; start: number; end: number; title: string; sub?: string;
@@ -46,14 +46,13 @@ const overlaps = (a0: number, a1: number, b0: number, b1: number) => a0 < b1 && 
 export function fixedBlocks(s: State, date: string): Block[] {
   const st = s.settings;
   const out: Block[] = [];
-  // The day starts when he reports in (if that was today), otherwise at the planned wake time.
-  const setAt = s.days[date]?.setAt;
-  const wake = setAt && dateOf(setAt) === date ? Math.max(300, Math.floor(minsOf(setAt) / 5) * 5) : wakeFor(s, date);
+  // Planning assumes he starts on time.
+  const wake = wakeFor(s, date);
   const prep = bedPrepFor(s, date);
   const off = prep - st.offDutyMin;
-  // The routine ends when he taps Done, else after its usual (learned) length.
+  // Planned length; on the day it lasts until he taps Done (see layoutDay).
   const mEnd = s.days[date]?.morningEnd;
-  const morningEnd = mEnd && dateOf(mEnd) === date ? Math.max(wake + 1, minsOf(mEnd)) : wake + morningMinutes(s);
+  const morningEnd = mEnd && dateOf(mEnd) === date ? Math.max(wake + 1, minsOf(mEnd)) : wake + st.morningMin;
   const busy: [number, number][] = [[wake, morningEnd]];
   out.push({ key: 'f:morning', start: wake, end: morningEnd, title: 'Awake, ready, breakfast', kind: 'routine', blocking: true });
   for (const e of eventsOn(s, date)) {

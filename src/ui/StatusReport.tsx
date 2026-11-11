@@ -38,7 +38,6 @@ export function StatusReport() {
         <span class="d" style="font-size:18px">TODAY'S FLOOR AT {sel.name}</span>
         <span style="font-size:15px;line-height:1.35">{floorText(S(), today, picked)}</span>
         <span class="soft" style="font-size:14px;line-height:1.35">{sab ? 'Hit the floor and the day is complete.' : "Hit the floor and it's a full mission success."}</span>
-        {!cur && <span class="soft" style="font-size:14px;line-height:1.35">Reporting in starts your day. The plan builds from now.</span>}
       </div>
       <button type="button" class="big report" onClick={() => actions.setLevel(picked as Level)}>
         <span>REPORT IN!</span><Arrow />

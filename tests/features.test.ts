@@ -151,16 +151,16 @@ describe('far-off deadlines', () => {
 });
 
 describe('starting the day', () => {
-  it('starts the morning routine when he reports in, and plans from there', () => {
+  it('plans as if on time, and keeps the morning routine open until Done', () => {
     const s = sample();
-    s.days['2026-11-12'] = { level: 3, setAt: at('2026-11-12T11:02') };
-    const now = at('2026-11-12T11:05');
+    s.days['2026-11-12'] = { level: 3, setAt: at('2026-11-12T10:40') };
+    const now = at('2026-11-12T11:02');
     const items = layoutDay(s, forecast(s, now), '2026-11-12', now);
     const morning = items.find((i) => i.key === 'f:morning')!;
-    expect(morning.start).toBe(11 * 60);
+    expect(morning.start).toBe(8 * 60);
+    expect(morning.end).toBe(11 * 60 + 5);
+    expect(morning.now).toBe(true);
     for (const m of items.filter((i) => i.kind === 'mission')) expect(m.start).toBeGreaterThanOrEqual(morning.end);
-    const lunch = items.find((i) => i.key === 'f:lunch')!;
-    expect(lunch.start).toBeGreaterThanOrEqual(morning.end);
   });
 });
 
@@ -190,18 +190,11 @@ describe('cooking dinner', () => {
 describe('morning routine', () => {
   it('ends when Done is tapped, and the plan starts right after', () => {
     const s = sample();
-    s.days['2026-11-12'] = { level: 3, setAt: at('2026-11-12T09:00'), morningEnd: at('2026-11-12T09:22') };
-    const now = at('2026-11-12T09:23');
+    s.days['2026-11-12'] = { level: 3, setAt: at('2026-11-12T08:00'), morningEnd: at('2026-11-12T08:22') };
+    const now = at('2026-11-12T08:23');
     const items = layoutDay(s, forecast(s, now), '2026-11-12', now);
-    expect(items.find((i) => i.key === 'f:morning')!.end).toBe(9 * 60 + 22);
-    const first = items.filter((i) => i.kind === 'mission').sort((a, b) => a.start - b.start)[0];
-    expect(first.start).toBeLessThan(9 * 60 + 50);
-  });
-  it('learns how long mornings really take', async () => {
-    const { morningMinutes } = await import('../src/model/learn');
-    const s = sample();
-    for (const [d, m] of [['2026-11-01', 30], ['2026-11-02', 40], ['2026-11-03', 35]] as const)
-      s.days[d] = { setAt: at(`${d}T08:00`), morningEnd: at(`${d}T08:00`) + m * 60000 };
-    expect(morningMinutes(s)).toBe(35);
+    expect(items.find((i) => i.key === 'f:morning')!.end).toBe(8 * 60 + 22);
+    const first = items.filter((i) => i.kind === 'mission').sort((x, y) => x.start - y.start)[0];
+    expect(first.start).toBeLessThan(8 * 60 + 50);
   });
 });

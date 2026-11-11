@@ -41,6 +41,7 @@ export interface Mission {
   window?: [number, number]; // earliest start and latest finish, travel included (minutes from midnight)
   errand?: boolean;        // one-off errand: planned on good days, then gone
   days?: number[];         // habit: only on these weekdays
+  rotation?: { title: string; detail: string }[]; // practice: sessions done in turn (A, B, C...)
   notFloor?: boolean;      // habit that isn't part of the day's floor
   form?: 'measure';
   steps?: { at: number; min: number; title: string }[]; // chore: hands-on moments, minutes from the start; must be home for each

@@ -272,6 +272,14 @@ export function forecast(s: State, now: number): Forecast {
   return v;
 }
 
+/** Which session of a rotation is next (skip = sessions already placed earlier today). */
+export function rotationAt(s: State, m: Mission, skip = 0) {
+  const r = m.rotation!;
+  const done = s.logs.filter((l) => l.missionId === m.id && l.done).length;
+  return r[(done + skip) % r.length];
+}
+const detailOf = (s: State, m: Mission, skip = 0) => (m.rotation?.length ? [rotationAt(s, m, skip).detail, m.note].filter(Boolean).join('\n\n') : m.note);
+
 /** Lay a day's allocation onto the clock. Today is laid from "now"; nothing is ever overdue. */
 export function layoutDay(s: State, fc: Forecast, date: string, now: number): PlanItem[] {
   const today = fc.today;
@@ -289,6 +297,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   const usedUnits = new Map<string, number>();
   const label = (m: Mission, min: number, units: number, skip = 0) => {
     const bits: string[] = [];
+    if (m.rotation?.length) bits.push(rotationAt(s, m, skip).title);
     const named = m.kind === 'work' ? nextLabels(m, units, skip) : [];
     if (named.length) bits.push(describeUnits(named));
     else if (m.kind === 'work' && m.unitName && m.unitsTotal) {
@@ -336,7 +345,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
       const end = Math.max(round5(nowMin), st + min);
       slots = slots.flatMap(([a, b]) => (b <= end ? [] : [[Math.max(a, end), b] as [number, number]]));
       const title = run.step !== undefined ? stepTitle(m, run.step) : m.kind === 'habit' ? habitTitle(m, level) : m.title;
-      items.push({ key: run.step !== undefined ? `c:${m.id}:${run.step}` : keyFor(m.id), start: st, end, title, sub: label(m, min, run.units), detail: m.note, kind: 'mission', missionId: m.id, units: run.units, baseMin: run.plannedMin, min, step: run.step, running: true });
+      items.push({ key: run.step !== undefined ? `c:${m.id}:${run.step}` : keyFor(m.id), start: st, end, title, sub: label(m, min, run.units), detail: detailOf(s, m), kind: 'mission', missionId: m.id, units: run.units, baseMin: run.plannedMin, min, step: run.step, running: true });
     }
   }
 
@@ -409,16 +418,17 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     }
     const skip = usedUnits.get(m.id) || 0;
     usedUnits.set(m.id, skip + a.units);
-    items.push({ key: keyFor(m.id), start: at, end: at + a.min, title: a.habit ? habitTitle(m, level) : m.title, sub: label(m, a.min, a.units, skip), detail: m.note, kind: 'mission', missionId: m.id, units: a.units, baseMin: a.baseMin, min: a.min });
+    items.push({ key: keyFor(m.id), start: at, end: at + a.min, title: a.habit ? habitTitle(m, level) : m.title, sub: label(m, a.min, a.units, skip), detail: detailOf(s, m, skip), kind: 'mission', missionId: m.id, units: a.units, baseMin: a.baseMin, min: a.min });
   }
   // Blocks can land out of planning order (best times, gaps), so name each mission's blocks in time order.
   for (const id of usedUnits.keys()) {
     const m = byId.get(id);
-    if (!m || m.kind !== 'work' || !m.labels?.length) continue;
-    let skip = run?.missionId === id ? run.units : 0;
+    if (!m || !((m.kind === 'work' && m.labels?.length) || m.rotation?.length)) continue;
+    let skip = run?.missionId === id ? (m.rotation?.length ? 1 : run.units) : 0;
     for (const it of items.filter((x) => x.missionId === id && !x.done && !x.running && x.units).sort((x, y) => x.start - y.start)) {
       it.sub = label(m, it.min || 0, it.units!, skip);
-      skip += it.units!;
+      if (m.rotation?.length) it.detail = detailOf(s, m, skip);
+      skip += m.rotation?.length ? 1 : it.units!;
     }
   }
   items.sort((a, b) => a.start - b.start || a.end - b.end);

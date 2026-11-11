@@ -74,7 +74,7 @@ box-shadow:5px 5px 0 -3px #fff,5px 5px 0 0 var(--ink),10px 10px 0 -3px #fff,10px
 .full{display:flex;flex-direction:column;align-items:flex-start;gap:14px;min-height:420px;padding:18px;border:4px solid var(--ink);border-radius:2px;box-shadow:7px 7px 0 var(--ink);background:#fff}
 .full h1{font-family:var(--display);font-weight:400;font-size:44px;line-height:.96;letter-spacing:.03em;overflow-wrap:anywhere}
 .full .cap{padding:3px 12px;background:var(--yellow);border:3px solid var(--ink);transform:rotate(-2deg);font-family:var(--display);font-size:20px;letter-spacing:.06em}
-.bubble{position:relative;padding:12px 14px;border:3px solid var(--ink);border-radius:20px;background:var(--paper);font-size:15px;line-height:1.35}
+.bubble{white-space:pre-line;position:relative;padding:12px 14px;border:3px solid var(--ink);border-radius:20px;background:var(--paper);font-size:15px;line-height:1.35}
 .actions{margin-top:auto;width:100%;display:flex;flex-direction:column;gap:12px}
 .big{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;height:68px;padding:0;border:3px solid var(--ink);border-radius:6px;box-shadow:5px 5px 0 var(--ink);font-family:var(--display);font-size:36px;letter-spacing:.06em}
 .big.go{background:var(--green)}.big.fin{background:var(--blue);color:#fff}.big.red{background:var(--red);color:#fff}.big.sm{height:54px;font-size:26px}

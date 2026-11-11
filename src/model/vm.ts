@@ -1,6 +1,6 @@
 import type { State, Mission } from './types';
 import { addDays, dateOf, diffDays, fmtDate, fmtDay, fmtDur, fmtT, minsOf, weekStart, weekday } from './time';
-import { describeUnits, forecast, layoutDay, nextLabels, orders, habitMin, habitTitle, habitsDue, type Forecast, type PlanItem } from './planner';
+import { describeUnits, rotationAt, forecast, layoutDay, nextLabels, orders, habitMin, habitTitle, habitsDue, type Forecast, type PlanItem } from './planner';
 import { levelName, nice } from './seed';
 import { bodyFat, choreDue, choreInterval, choreLast, exerciseCeiling, factor, partOf } from './learn';
 import { eventsOn, isBackupDay, isRest } from './schedule';
@@ -104,6 +104,10 @@ function missionPanel(s: State, m: Mission, level: number): PanelVM {
     const next = done ? '' : describeUnits(nextLabels(m, u));
     const summary = done ? 'Complete' : m.labels?.length ? `About ${fmtDur(left * m.minutes * f)} left` : `${left} ${left === 1 ? 'block' : 'blocks'} left · about ${fmtDur(left * m.minutes * f)}`;
     return { key: `mi:${m.id}`, h: 'MISSION', t: m.title, m: next ? `Next: ${next} · ${summary.toLowerCase()}` : summary, d: m.note, done, missionId: done ? undefined : m.id, units: u, baseMin: u * m.minutes, min: Math.round(u * m.minutes * f), act: done ? 'info' : 'mission', editable: true };
+  }
+  if (m.rotation?.length) {
+    const nx = rotationAt(s, m);
+    return { key: `mi:${m.id}`, h: 'MISSION', t: m.title, m: `Next: ${nx.title} · ${Math.round(m.minutes * f)} min`, d: [nx.detail, m.note].filter(Boolean).join('\n\n'), missionId: m.id, units: 1, baseMin: m.minutes, min: Math.round(m.minutes * f), act: 'mission', editable: true };
   }
   return { key: `mi:${m.id}`, h: 'MISSION', t: m.title, m: `${Math.round(m.minutes * f)} min blocks${m.dailyCapMin ? ` · up to ${fmtDur(m.dailyCapMin)} a day` : ''}`, d: m.note, missionId: m.id, units: 1, baseMin: m.minutes, min: Math.round(m.minutes * f), act: 'mission', editable: true };
 }

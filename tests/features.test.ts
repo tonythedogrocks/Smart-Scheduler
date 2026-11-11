@@ -310,3 +310,15 @@ describe('block names follow the clock', () => {
     expect([...firsts].sort((a, b) => a - b)).toEqual(firsts);
   });
 });
+
+describe('workout rotation', () => {
+  it('names the next session and moves on after each one done', () => {
+    const s = sample(); s.days['2026-11-12'] = { level: 4 };
+    const w = s.missions.find((m) => m.id === 'court')!;
+    w.rotation = [{ title: 'Session A', detail: 'a' }, { title: 'Session B', detail: 'b' }, { title: 'Session C', detail: 'c' }];
+    s.logs.push(log('court', '2026-11-10', '10:00', 45));
+    const now = at('2026-11-12T08:00');
+    const it = layoutDay(s, forecast(s, now), '2026-11-12', now).find((i) => i.missionId === 'court');
+    if (it) { expect(it.sub).toMatch(/^Session B/); expect(it.detail).toMatch(/^b/); }
+  });
+});

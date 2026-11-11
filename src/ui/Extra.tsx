@@ -10,6 +10,7 @@ import { fromHM, toHM } from './bits';
 import type { Level } from '../model/types';
 import { useEffect, useState } from 'preact/hooks';
 import { getCfg, onSyncStatus, setCfg, syncNow, syncStatus } from '../model/sync';
+import { sendFiles, type Sent } from '../model/inbox';
 
 export function Achievements() {
   const s = S();
@@ -142,6 +143,7 @@ export function Settings() {
         {st.restDay !== null && <p class="soft" style="font-size:14px">{st.restDayName} essentials are chosen per mission: open a mission and tap "Edit this mission".</p>}
       </div>
       <SyncCard />
+      <SendFiles />
       <div class="card narrow">
         <h2>BACKUP</h2>
         <p>A backup file is a full copy of everything, for safekeeping.</p>
@@ -205,6 +207,37 @@ function Chores() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function SendFiles() {
+  const [, bump] = useState(0);
+  useEffect(() => onSyncStatus(() => bump((n) => n + 1)), []);
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState<Sent[]>([]);
+  if (!getCfg()) return null;
+  const go = async (e: Event) => {
+    const input = e.target as HTMLInputElement;
+    const files = [...(input.files || [])];
+    input.value = '';
+    if (!files.some((f) => /\.pdf$/i.test(f.name))) { setMsg('No PDFs in what you picked.'); return; }
+    setBusy(true); setSent([]);
+    try { const got = await sendFiles(files, setMsg); setSent(got); setMsg(`Sent ${got.length} ${got.length === 1 ? 'file' : 'files'}. Tell Claude they're in.`); }
+    catch (err: any) { setMsg(err?.message === 'Failed to fetch' ? 'Offline. Try again when you are connected.' : err?.message || 'Something went wrong.'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div class="card narrow">
+      <h2>SEND FILES TO CLAUDE</h2>
+      <p>Pick PDFs or a whole folder. This device pulls out just the text and sends it to your private data repo, where Claude can read it. The PDFs themselves stay here.</p>
+      <div class="row">
+        <label class="small on" style={`display:inline-flex;align-items:center;cursor:pointer;${busy ? 'opacity:.45;pointer-events:none' : ''}`}>Pick a folder<input type="file" {...{ webkitdirectory: true }} multiple style="display:none" onChange={go} /></label>
+        <label class="small" style={`display:inline-flex;align-items:center;cursor:pointer;${busy ? 'opacity:.45;pointer-events:none' : ''}`}>Pick PDFs<input type="file" accept="application/pdf,.pdf" multiple style="display:none" onChange={go} /></label>
+      </div>
+      {msg && <p class="soft" role="status" style="font-size:14px">{msg}</p>}
+      {sent.length > 0 && <ul>{sent.map((x) => <li>{x.name}: {x.pages} pages{x.blank ? `, ${x.blank} without text (scans)` : ''}</li>)}</ul>}
     </div>
   );
 }

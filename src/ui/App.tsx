@@ -168,7 +168,7 @@ export function App() {
             </div>
             <ol class="tl">
               {issue.chapters.flatMap((ch, ci) => ch.panels.map((p) => ({ p, ci }))).map(({ p, ci }) => (
-                <li class={`${p.now ? 'is-now' : ''} ${p.done ? 'is-done' : ''}`}>
+                <li class={`${p.now ? 'is-now' : ''} ${p.done ? 'is-done' : ''} ${p.past && !p.done && !p.now ? 'is-past' : ''}`}>
                   <span class="tl-time">{p.time || p.h}</span>
                   <button type="button" class={`tl-card ${p.fixed ? 'fixed' : ''}`} style={p.color && !p.done && !p.now ? `border-left:10px solid ${p.color}` : ''} onClick={() => go({ view: 'panel', ch: ci, p: p.key })}>
                     {p.kick && <span class="tl-kick">{p.kick}</span>}

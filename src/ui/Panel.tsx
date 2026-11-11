@@ -80,6 +80,13 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
         {p.act === 'meal' && p.meal === 'dinner' && p.date && p.date >= lib.today && !day.cook && (
           <button type="button" class="small on" style="align-self:flex-start" onClick={() => actions.setDay(p.date!, { cook: true })}>I'm cooking tonight</button>
         )}
+        {p.act === 'morning' && p.date === lib.today && (
+          day.morningEnd ? <span class="caption" style="align-self:flex-start;font-size:17px">READY FOR THE DAY!</span>
+          : <button type="button" class="big fin" onClick={() => actions.setDay(p.date!, { morningEnd: nowTs() })}>
+              <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+              <span>DONE!</span>
+            </button>
+        )}
         {p.act === 'cook' && p.date && (
           day.cookEnd ? <span class="caption" style="align-self:flex-start;font-size:17px">COOKED. DINNER'S ON.</span>
           : day.cookStart ? (

@@ -1,6 +1,6 @@
 import type { State, Evt } from './types';
 import { addDays, dateOf, minsOf, parseD, weekday } from './time';
-import { cookMinutes } from './learn';
+import { cookMinutes, morningMinutes } from './learn';
 
 export interface Block {
   key: string; start: number; end: number; title: string; sub?: string;
@@ -51,8 +51,11 @@ export function fixedBlocks(s: State, date: string): Block[] {
   const wake = setAt && dateOf(setAt) === date ? Math.max(300, Math.floor(minsOf(setAt) / 5) * 5) : wakeFor(s, date);
   const prep = bedPrepFor(s, date);
   const off = prep - st.offDutyMin;
-  out.push({ key: 'f:morning', start: wake, end: wake + st.morningMin, title: 'Awake, ready, breakfast', kind: 'routine', blocking: true });
-  const busy: [number, number][] = [[wake, wake + st.morningMin]];
+  // The routine ends when he taps Done, else after its usual (learned) length.
+  const mEnd = s.days[date]?.morningEnd;
+  const morningEnd = mEnd && dateOf(mEnd) === date ? Math.max(wake + 1, minsOf(mEnd)) : wake + morningMinutes(s);
+  const busy: [number, number][] = [[wake, morningEnd]];
+  out.push({ key: 'f:morning', start: wake, end: morningEnd, title: 'Awake, ready, breakfast', kind: 'routine', blocking: true });
   for (const e of eventsOn(s, date)) {
     if (e.travel) out.push({ key: `f:to:${e.id}`, start: e.start - e.travel, end: e.start, title: `Travel to ${e.title}`, sub: `${e.travel} min`, kind: 'travel', evtId: e.id, blocking: true });
     out.push({ key: `f:ev:${e.id}`, start: e.start, end: e.end, title: e.title, sub: e.note, kind: 'event', evtId: e.id, blocking: true });

@@ -65,7 +65,7 @@ export interface Log {
   plannedMin: number; units: number; done: boolean; level?: Level; xp?: number; step?: number;
 }
 
-export interface DayRec { t?: number; level?: Level; setAt?: number; floorAwarded?: boolean; lunchAt?: number; dinnerAt?: number; starts?: Record<string, number>; cook?: boolean; cookStart?: number; cookEnd?: number }
+export interface DayRec { t?: number; level?: Level; setAt?: number; floorAwarded?: boolean; lunchAt?: number; dinnerAt?: number; starts?: Record<string, number>; cook?: boolean; cookStart?: number; cookEnd?: number; morningEnd?: number }
 
 export interface Settings {
   wake: number; morningMin: number; bedPrep: number; offDutyMin: number;

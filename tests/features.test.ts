@@ -186,3 +186,22 @@ describe('cooking dinner', () => {
     expect(cookMinutes(s)).toBe(65);
   });
 });
+
+describe('morning routine', () => {
+  it('ends when Done is tapped, and the plan starts right after', () => {
+    const s = sample();
+    s.days['2026-11-12'] = { level: 3, setAt: at('2026-11-12T09:00'), morningEnd: at('2026-11-12T09:22') };
+    const now = at('2026-11-12T09:23');
+    const items = layoutDay(s, forecast(s, now), '2026-11-12', now);
+    expect(items.find((i) => i.key === 'f:morning')!.end).toBe(9 * 60 + 22);
+    const first = items.filter((i) => i.kind === 'mission').sort((a, b) => a.start - b.start)[0];
+    expect(first.start).toBeLessThan(9 * 60 + 50);
+  });
+  it('learns how long mornings really take', async () => {
+    const { morningMinutes } = await import('../src/model/learn');
+    const s = sample();
+    for (const [d, m] of [['2026-11-01', 30], ['2026-11-02', 40], ['2026-11-03', 35]] as const)
+      s.days[d] = { setAt: at(`${d}T08:00`), morningEnd: at(`${d}T08:00`) + m * 60000 };
+    expect(morningMinutes(s)).toBe(35);
+  });
+});

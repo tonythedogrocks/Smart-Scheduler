@@ -105,6 +105,14 @@ export function flareSpike(s: State, now: number): boolean {
   return recent.length >= 2 || recent.some((f) => (f.rating ?? 0) >= 7 && f.ts > now - 2 * 86400000);
 }
 
+/** Minutes the morning routine really takes (report-in to Done): the setting until 3 real runs. */
+export function morningMinutes(s: State): number {
+  const runs = Object.values(s.days).filter((d) => d.setAt && d.morningEnd && d.morningEnd > d.setAt).map((d) => (d.morningEnd! - d.setAt!) / 60000).filter((m) => m >= 10 && m <= 180);
+  if (runs.length < 3) return s.settings.morningMin;
+  const recent = runs.slice(-7);
+  return Math.round(recent.reduce((a, b) => a + b, 0) / recent.length / 5) * 5;
+}
+
 /** Minutes it really takes to cook dinner: the setting until 2 real runs, then the recent average. */
 export function cookMinutes(s: State): number {
   const runs = Object.values(s.days).filter((d) => d.cookStart && d.cookEnd && d.cookEnd > d.cookStart).map((d) => (d.cookEnd! - d.cookStart!) / 60000).filter((m) => m >= 5 && m <= 240);

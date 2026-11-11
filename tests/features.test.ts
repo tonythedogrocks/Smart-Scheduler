@@ -208,3 +208,20 @@ describe('morning pattern', () => {
     expect(morningStats(s)).toEqual({ n: 3, readyAt: 9 * 60 + 40, span: 35 });
   });
 });
+
+describe('cooking for the family', () => {
+  it('has its own first guess and learns separately from cooking for himself', async () => {
+    const { cookMinutes } = await import('../src/model/learn');
+    const { fixedBlocks } = await import('../src/model/schedule');
+    const s = sample();
+    s.days['2026-11-14'] = { cook: 'family' };
+    const b = fixedBlocks(s, '2026-11-14');
+    const cook = b.find((x) => x.key === 'f:cook')!;
+    expect(cook.title).toBe('Cooking for the family');
+    expect(cook.end - cook.start).toBe(60);
+    for (const [d, m] of [['2026-11-01', 90], ['2026-11-02', 80]] as const)
+      s.days[d] = { cook: 'family', cookStart: at(`${d}T16:00`), cookEnd: at(`${d}T16:00`) + m * 60000 };
+    expect(cookMinutes(s, true)).toBe(85);
+    expect(cookMinutes(s, false)).toBe(45);
+  });
+});

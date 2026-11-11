@@ -84,12 +84,13 @@ export function fixedBlocks(s: State, date: string): Block[] {
   const lunchEnd = place('lunch', day.lunchAt ?? st.lunchAt, st.lunchMin, 660, 870);
   // Cooking: a block right before dinner that turns into dinner when it's done.
   let dinnerWant = day.dinnerAt ?? st.dinnerAt;
-  const cookLen = cookMinutes(s);
+  const fam = day.cook === 'family';
+  const cookLen = cookMinutes(s, fam);
   if (day.cook) {
     const cs = day.cookStart !== undefined ? minsOf(day.cookStart) : dinnerWant - cookLen;
     const ce = day.cookEnd !== undefined ? minsOf(day.cookEnd) : cs + cookLen;
     dinnerWant = ce;
-    out.push({ key: 'f:cook', start: cs, end: ce, title: 'Cooking dinner', sub: day.cookEnd ? `${Math.round(ce - cs)} min` : `about ${cookLen} min · dinner right after`, kind: 'routine', blocking: true });
+    out.push({ key: 'f:cook', start: cs, end: ce, title: fam ? 'Cooking for the family' : 'Cooking dinner', sub: day.cookEnd ? `${Math.round(ce - cs)} min` : `about ${cookLen} min · dinner right after`, kind: 'routine', blocking: true });
     busy.push([cs, ce]);
   }
   const dinnerEnd = place('dinner', dinnerWant, st.dinnerMin, 1020, 1230);

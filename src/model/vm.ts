@@ -51,7 +51,8 @@ function dayIssue(s: State, fc: Forecast, date: string, now: number): { issue: I
     chapters = [{ title: 'HOW IT WENT', panels }];
     sub = 'Closed';
   } else {
-    const fx = items.filter((i) => i.kind === 'fixed' && ['event', 'offduty', 'note'].includes(i.block!.kind) || i.block?.key.startsWith('f:dishes'));
+    const cooking = !!s.days[date]?.cook;
+    const fx = items.filter((i) => i.kind === 'fixed' && ['event', 'offduty', 'note'].includes(i.block!.kind) || i.block?.key.startsWith('f:dishes') || (cooking && (i.block?.key === 'f:cook' || i.block?.key === 'f:dinner')));
     const panels = fx.map((i) => itemPanel(s, i, date, false));
     const day = fc.days.find((d) => d.date === date);
     const work = (day?.blocks || []).filter((b) => !b.habit);

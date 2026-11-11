@@ -118,10 +118,10 @@ export function morningStats(s: State) {
   return { n: recent.length, readyAt: Math.round(ready / 5) * 5, span: spans.length >= 3 ? Math.round(spans.reduce((a, b) => a + b, 0) / spans.length / 5) * 5 : null };
 }
 
-/** Minutes it really takes to cook dinner: the setting until 2 real runs, then the recent average. */
-export function cookMinutes(s: State): number {
-  const runs = Object.values(s.days).filter((d) => d.cookStart && d.cookEnd && d.cookEnd > d.cookStart).map((d) => (d.cookEnd! - d.cookStart!) / 60000).filter((m) => m >= 5 && m <= 240);
-  if (runs.length < 2) return s.settings.cookMin;
+/** Minutes it really takes to cook, for himself or for the family: the setting until 2 real runs, then the recent average. */
+export function cookMinutes(s: State, family = false): number {
+  const runs = Object.values(s.days).filter((d) => !!d.cook && (d.cook === 'family') === family && d.cookStart && d.cookEnd && d.cookEnd > d.cookStart).map((d) => (d.cookEnd! - d.cookStart!) / 60000).filter((m) => m >= 5 && m <= 240);
+  if (runs.length < 2) return family ? s.settings.cookFamilyMin : s.settings.cookMin;
   const recent = runs.slice(-6);
   return Math.round(recent.reduce((a, b) => a + b, 0) / recent.length / 5) * 5;
 }

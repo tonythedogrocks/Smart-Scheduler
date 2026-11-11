@@ -45,7 +45,7 @@ function Doing() {
 
 function Add() {
   const arg = L().sheetArg || '';
-  const [kind, setKind] = useState<'shift' | 'workout' | 'event' | 'objective'>(arg.startsWith('objective') ? 'objective' : 'shift');
+  const [kind, setKind] = useState<'shift' | 'workout' | 'event' | 'cooking' | 'objective'>(arg.startsWith('objective') ? 'objective' : 'shift');
   const today = dateOf(nowTs());
   const [date, setDate] = useState(today);
   const [start, setStart] = useState('10:00');
@@ -54,6 +54,7 @@ function Add() {
   const [end, setEnd] = useState('12:00');
   const [travel, setTravel] = useState(20);
   const [title, setTitle] = useState('');
+  const [forFamily, setForFamily] = useState(true);
   const [repeat, setRepeat] = useState<'once' | 'weekly' | 'some'>('once');
   const [weeks, setWeeks] = useState<number[]>([]);
   const [skill, setSkill] = useState(arg.split(':')[1] || S().skills[0]?.id || '');
@@ -77,6 +78,12 @@ function Add() {
       close(); go({ view: 'toc', c: skill, i: id, ch: 0, p: '' });
       return;
     }
+    if (kind === 'cooking') {
+      actions.setDay(date, { cook: forFamily ? 'family' : true });
+      toast(forFamily ? 'Cooking for the family added' : 'Cooking added');
+      close();
+      return;
+    }
     if (en <= st) return;
     const t = kind === 'shift' ? cfg.shift.title : kind === 'workout' ? cfg.workoutTitle : title.trim() || 'Event';
     actions.addEvent({ title: t, kind, start: st, end: en, travel: tr, ...(kind === 'event' && repeat !== 'once' ? { weekday: weekday(date), ...(repeat === 'some' && weeks.length ? { nth: [...weeks].sort() } : {}) } : { date }) });
@@ -85,8 +92,17 @@ function Add() {
   };
   return (
     <Sheet title="ADD">
-      <div class="row">{(['shift', 'workout', 'event', 'objective'] as const).filter((k) => k !== 'objective' || S().skills.length).map((k) => <button type="button" class={`small ${kind === k ? 'on' : ''}`} onClick={() => setKind(k)}>{k === 'workout' ? cfg.workoutTitle : k === 'shift' ? cfg.shift.title : k[0].toUpperCase() + k.slice(1)}</button>)}</div>
-      {kind === 'objective' ? (
+      <div class="row">{(['shift', 'workout', 'event', 'cooking', 'objective'] as const).filter((k) => k !== 'objective' || S().skills.length).map((k) => <button type="button" class={`small ${kind === k ? 'on' : ''}`} onClick={() => setKind(k)}>{k === 'workout' ? cfg.workoutTitle : k === 'shift' ? cfg.shift.title : k[0].toUpperCase() + k.slice(1)}</button>)}</div>
+      {kind === 'cooking' ? (
+        <>
+          <label class="field">Day<input type="date" value={date} onInput={(e) => setDate(val(e))} /></label>
+          <div class="row">
+            <button type="button" class={`small ${forFamily ? 'on' : ''}`} onClick={() => setForFamily(true)}>For the family</button>
+            <button type="button" class={`small ${!forFamily ? 'on' : ''}`} onClick={() => setForFamily(false)}>Just me</button>
+          </div>
+          <span class="soft" style="font-size:14px">It's planned to finish right at dinner time. Move dinner on that day's Dinner panel to shift both.</span>
+        </>
+      ) : kind === 'objective' ? (
         <>
           <label class="field">Skill<select value={skill} onChange={(e) => setSkill(val(e))}>{S().skills.map((k) => <option value={k.id}>{k.title}</option>)}</select></label>
           <label class="field">Objective<input value={title} onInput={(e) => setTitle(val(e))} placeholder="What is the goal?" /></label>

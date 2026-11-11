@@ -198,3 +198,13 @@ describe('morning routine', () => {
     expect(first.start).toBeLessThan(8 * 60 + 50);
   });
 });
+
+describe('morning pattern', () => {
+  it('reports when he is usually ready, without changing the plan', async () => {
+    const { morningStats } = await import('../src/model/learn');
+    const s = sample();
+    for (const [d, end] of [['2026-11-01', '09:30'], ['2026-11-02', '09:50'], ['2026-11-03', '09:40']] as const)
+      s.days[d] = { setAt: at(`${d}T09:05`), morningEnd: at(`${d}T${end}`) };
+    expect(morningStats(s)).toEqual({ n: 3, readyAt: 9 * 60 + 40, span: 35 });
+  });
+});

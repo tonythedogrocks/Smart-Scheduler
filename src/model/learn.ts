@@ -105,6 +105,19 @@ export function flareSpike(s: State, now: number): boolean {
   return recent.length >= 2 || recent.some((f) => (f.rating ?? 0) >= 7 && f.ts > now - 2 * 86400000);
 }
 
+/**
+ * Morning pattern, for Debrief only (planning assumes an on-time start): what time he's
+ * usually ready, and how long from reporting in to Done. Needs 3 mornings.
+ */
+export function morningStats(s: State) {
+  const runs = Object.values(s.days).filter((d) => d.morningEnd);
+  if (runs.length < 3) return null;
+  const recent = runs.slice(-14);
+  const ready = recent.reduce((a, d) => a + minsOf(d.morningEnd!), 0) / recent.length;
+  const spans = recent.filter((d) => d.setAt && d.morningEnd! > d.setAt && d.morningEnd! - d.setAt < 4 * 3600000).map((d) => (d.morningEnd! - d.setAt!) / 60000);
+  return { n: recent.length, readyAt: Math.round(ready / 5) * 5, span: spans.length >= 3 ? Math.round(spans.reduce((a, b) => a + b, 0) / spans.length / 5) * 5 : null };
+}
+
 /** Minutes it really takes to cook dinner: the setting until 2 real runs, then the recent average. */
 export function cookMinutes(s: State): number {
   const runs = Object.values(s.days).filter((d) => d.cookStart && d.cookEnd && d.cookEnd > d.cookStart).map((d) => (d.cookEnd! - d.cookStart!) / 60000).filter((m) => m >= 5 && m <= 240);

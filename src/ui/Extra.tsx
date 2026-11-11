@@ -3,7 +3,7 @@ import { achievements, heroLevel, xpOf } from '../model/game';
 import { Choice } from './Choice';
 import type { Library } from '../model/vm';
 import { addDays, dateOf, fmtDate, fmtDay, fmtDur, fmtT, nowTs, weekStart } from '../model/time';
-import { afterStats, choreDue, choreInterval, choreLast, contextStats, crashAfter5, exerciseCeiling, factor, flareStats, followThrough, learnedCapacity } from '../model/learn';
+import { afterStats, morningStats, choreDue, choreInterval, choreLast, contextStats, crashAfter5, exerciseCeiling, factor, flareStats, followThrough, learnedCapacity } from '../model/learn';
 import { eventsOn } from '../model/schedule';
 import { levelName, nice } from '../model/seed';
 import { fromHM, toHM } from './bits';
@@ -48,6 +48,8 @@ export function Debrief({ lib }: { lib: Library }) {
   if (crash.confident) learned.push(`The day after Plus Ultra averages level ${crash.after.toFixed(1)}. Those days are now planned light.`);
   if (ft.n >= 10) learned.push(`${Math.round(ft.rate * 100)}% of started work gets finished in one go.`);
   for (const c of ctx) if (c.rate <= 0.6 || c.rate >= 0.9) learned.push(`${c.energy[0].toUpperCase() + c.energy.slice(1)} work in the ${c.part.toLowerCase()} gets finished ${Math.round(c.rate * 100)}% of the time.${c.n >= 8 ? ' Plans now lean toward your better times.' : ''}`);
+  const ms = morningStats(s);
+  if (ms) learned.push(`You're usually ready for the day by about ${fmtT(ms.readyAt)}${ms.span ? `, about ${ms.span} min after reporting in` : ''} (last ${ms.n} mornings).`);
   const plannable = new Set(['shift', 'workout', 'event', 'physical', 'mental', 'social']);
   for (const a of afterStats(s)) learned.push(`${a.energy[0].toUpperCase() + a.energy.slice(1)} work right after ${a.after === 'event' ? 'an event' : a.after === 'workout' ? 'a workout' : a.after === 'shift' ? 'a shift' : a.after === 'physical' || a.after === 'mental' || a.after === 'social' ? a.after + ' work' : a.after} gets finished ${Math.round(a.rate * 100)}% of the time, against ${Math.round(a.usual * 100)}% usually.${a.worse && plannable.has(a.after) ? ' Plans now leave a gap after it.' : ''}`);
   const ex = exerciseCeiling(s, today);

@@ -67,7 +67,7 @@ function afterChange(s: State, date: string) {
 
 export const actions = {
   setLevel(level: Level) {
-    mutate((s) => { const d = (s.days[today()] ||= {}); d.level = level; d.setAt = nowTs(); });
+    mutate((s) => { const d = (s.days[today()] ||= {}); d.level = level; /* first report of the day = start of the day */ if (!d.setAt || dateOf(d.setAt) !== today()) d.setAt = nowTs(); });
     setLocal({ status: false });
   },
   start(missionId: string, units: number, plannedMin: number, step?: number) {

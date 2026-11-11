@@ -1,5 +1,5 @@
 import type { State, Evt } from './types';
-import { addDays, parseD, weekday } from './time';
+import { addDays, dateOf, minsOf, parseD, weekday } from './time';
 
 export interface Block {
   key: string; start: number; end: number; title: string; sub?: string;
@@ -45,11 +45,13 @@ const overlaps = (a0: number, a1: number, b0: number, b1: number) => a0 < b1 && 
 export function fixedBlocks(s: State, date: string): Block[] {
   const st = s.settings;
   const out: Block[] = [];
-  const wake = wakeFor(s, date);
+  // The day starts when he reports in (if that was today), otherwise at the planned wake time.
+  const setAt = s.days[date]?.setAt;
+  const wake = setAt && dateOf(setAt) === date ? Math.max(300, Math.floor(minsOf(setAt) / 5) * 5) : wakeFor(s, date);
   const prep = bedPrepFor(s, date);
   const off = prep - st.offDutyMin;
   out.push({ key: 'f:morning', start: wake, end: wake + st.morningMin, title: 'Awake, ready, breakfast', kind: 'routine', blocking: true });
-  const busy: [number, number][] = [];
+  const busy: [number, number][] = [[wake, wake + st.morningMin]];
   for (const e of eventsOn(s, date)) {
     if (e.travel) out.push({ key: `f:to:${e.id}`, start: e.start - e.travel, end: e.start, title: `Travel to ${e.title}`, sub: `${e.travel} min`, kind: 'travel', evtId: e.id, blocking: true });
     out.push({ key: `f:ev:${e.id}`, start: e.start, end: e.end, title: e.title, sub: e.note, kind: 'event', evtId: e.id, blocking: true });

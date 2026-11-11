@@ -149,3 +149,17 @@ describe('far-off deadlines', () => {
     expect(weekly).toBeGreaterThan(0);
   });
 });
+
+describe('starting the day', () => {
+  it('starts the morning routine when he reports in, and plans from there', () => {
+    const s = sample();
+    s.days['2026-11-12'] = { level: 3, setAt: at('2026-11-12T11:02') };
+    const now = at('2026-11-12T11:05');
+    const items = layoutDay(s, forecast(s, now), '2026-11-12', now);
+    const morning = items.find((i) => i.key === 'f:morning')!;
+    expect(morning.start).toBe(11 * 60);
+    for (const m of items.filter((i) => i.kind === 'mission')) expect(m.start).toBeGreaterThanOrEqual(morning.end);
+    const lunch = items.find((i) => i.key === 'f:lunch')!;
+    expect(lunch.start).toBeGreaterThanOrEqual(morning.end);
+  });
+});

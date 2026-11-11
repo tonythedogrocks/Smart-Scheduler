@@ -75,12 +75,15 @@ export interface Log {
   plannedMin: number; units: number; done: boolean; level?: Level; xp?: number; step?: number;
 }
 
-export interface DayRec { t?: number; level?: Level; setAt?: number; floorAwarded?: boolean; lunchAt?: number; dinnerAt?: number; starts?: Record<string, number>; cook?: boolean | 'family'; cookStart?: number; cookEnd?: number; morningEnd?: number; dinnerTap?: number }
+export interface DayRec { t?: number; level?: Level; setAt?: number; floorAwarded?: boolean; lunchAt?: number; dinnerAt?: number; starts?: Record<string, number>; cook?: boolean | 'family'; cookStart?: number; cookEnd?: number; morningEnd?: number; dinnerTap?: number;
+  ate?: Partial<Record<'lunch' | 'dinner', { at: number; big?: boolean }>>; // confirmed meals: start (minutes from midnight), and whether it was a large one
+}
 
 export interface Settings {
   wake: number; morningMin: number; bedPrep: number; offDutyMin: number;
   lunchAt: number; lunchMin: number; dinnerAt: number; dinnerMin: number;
   dishesMin: number; mealGap: number; breakMin: number;
+  bigMealGap: number;       // minutes to wait before a workout after a large meal
   baseline: number; capacity: Record<Level, number>;
   restDay: number | null;  // weekday kept for essentials only (0 = Sunday), or none
   restDayName: string;

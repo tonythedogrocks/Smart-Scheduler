@@ -394,7 +394,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   for (const a of order) {
     const m = byId.get(a.missionId); if (!m) continue;
     const gapM = m.mealGap ?? gap;
-    const forbid: [number, number][] = m.workout ? fixed.filter((b) => b.kind === 'meal').map((b) => [b.start, b.end + gapM] as [number, number]) : [];
+    const forbid: [number, number][] = m.workout ? fixed.filter((b) => b.kind === 'meal').map((b) => [b.start, b.end + (b.big ? Math.max(gapM, s.settings.bigMealGap) : gapM)] as [number, number]) : [];
     // daylight-only (sunrise to sunset) and errand windows, travel included
     let lo = 0, hi = 1e9;
     if (m.daylight && s.settings.sun) { const [rise, set] = sunTimes(date, s.settings.sun.lat, s.settings.sun.lon); lo = Math.ceil(rise / 5) * 5; hi = Math.floor(set); }

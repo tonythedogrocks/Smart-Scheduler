@@ -6,7 +6,7 @@ import { bodyFat } from '../model/learn';
 import { describeUnits, nextLabels, orders } from '../model/planner';
 import { isBackupDay } from '../model/schedule';
 import { addDays, weekStart } from '../model/time';
-import { Arrow, useTick } from './bits';
+import { Arrow, fromHM, toHM, useTick } from './bits';
 import { Choice } from './Choice';
 
 function Measure() {
@@ -80,9 +80,28 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
             )}
           </>
         )}
-        {p.act === 'meal' && p.meal === 'dinner' && p.date === lib.today && (
-          <button type="button" class="big go sm" onClick={() => actions.dinnerNow()}>DINNER NOW</button>
-        )}
+        {p.act === 'meal' && p.meal && p.date === lib.today && (() => {
+          const got = day.ate?.[p.meal!];
+          return got ? (
+            <>
+              <div class="row">
+                <span style="font-size:15px">Ate at</span>
+                <input type="time" aria-label="Time you ate" value={toHM(got.at)} style="height:44px;padding:0 8px;border:3px solid var(--ink);border-radius:6px;font-weight:700" onChange={(e) => actions.ate(p.meal!, fromHM((e.target as HTMLInputElement).value))} />
+                <button type="button" class={`small ${got.big ? 'on' : ''}`} onClick={() => actions.ate(p.meal!, got.at, !got.big)}>Large meal</button>
+              </div>
+              <span class="soft" style="font-size:14px">Workouts wait {fmtDur(got.big ? Math.max(s.settings.mealGap, s.settings.bigMealGap) : s.settings.mealGap)} after it.</span>
+              <button type="button" class="plain" onClick={() => actions.ate(p.meal!, null)}>Haven't eaten yet after all</button>
+            </>
+          ) : (
+            <>
+              <button type="button" class="big go sm" onClick={() => (p.meal === 'dinner' ? actions.dinnerNow() : actions.ate('lunch'))}>EATING NOW</button>
+              <div class="row">
+                <span style="font-size:15px">Or I already ate at</span>
+                <input type="time" aria-label="Time you ate" style="height:44px;padding:0 8px;border:3px solid var(--ink);border-radius:6px;font-weight:700" onChange={(e) => { const v = (e.target as HTMLInputElement).value; if (v) actions.ate(p.meal!, fromHM(v)); }} />
+              </div>
+            </>
+          );
+        })()}
         {p.act === 'backup' && p.date && (
           <button type="button" class="small on" style="align-self:flex-start" onClick={() => actions.toggleBackup(weekStart(p.date!))}>
             {isBackupDay(s, p.date) ? `Back to a normal ${s.settings.restDayName}` : `Use this ${s.settings.restDayName} as a backup work day`}
@@ -115,7 +134,7 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
             </>
           )
         )}
-        {p.act === 'meal' && p.date && p.date >= lib.today && (
+        {p.act === 'meal' && p.date && p.date >= lib.today && !(p.meal && day.ate?.[p.meal]) && (
           <div class="row">
             <span style="font-size:15px">Move it:</span>
             {[-30, -15, 15, 30].map((d) => <button type="button" class="small" onClick={() => nudge(d)}>{d > 0 ? '+' : '−'}{Math.abs(d)} min</button>)}

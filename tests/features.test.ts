@@ -352,3 +352,19 @@ describe('time slots by real progress', () => {
     expect(at2[0].score).toBeGreaterThan(at2[2].score); // ...but one day doesn't flip the pattern
   });
 });
+
+describe('confirmed meals', () => {
+  it('a confirmed lunch sits where it happened and workouts wait from then (longer after a large meal)', async () => {
+    const { fixedBlocks } = await import('../src/model/schedule');
+    const s = sample(); s.days['2026-11-12'] = { level: 5, morningEnd: at('2026-11-12T08:40'), ate: { lunch: { at: 14 * 60 } } };
+    const lunch = fixedBlocks(s, '2026-11-12').find((b) => b.key === 'f:lunch')!;
+    expect(lunch.start).toBe(840); expect(lunch.ate).toBe(true);
+    const now = at('2026-11-12T14:35');
+    const court = () => { s.updatedAt = Math.random(); return layoutDay(s, forecast(s, now), '2026-11-12', now).find((i) => i.missionId === 'court'); };
+    const c1 = court();
+    if (c1) expect(c1.start).toBeGreaterThanOrEqual(870 + 90);
+    s.days['2026-11-12'].ate = { lunch: { at: 840, big: true } };
+    const c2 = court();
+    if (c2) expect(c2.start).toBeGreaterThanOrEqual(870 + 180);
+  });
+});

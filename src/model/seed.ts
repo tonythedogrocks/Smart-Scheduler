@@ -21,7 +21,7 @@ export const levelName = (n: number) => LEVELS.find((l) => l.n === n)?.name ?? '
 export const DEFAULT_SETTINGS: Settings = {
   wake: 480, morningMin: 60, bedPrep: 1390, offDutyMin: 120,
   lunchAt: 750, lunchMin: 30, dinnerAt: 1110, dinnerMin: 30, dishesMin: 20,
-  mealGap: 90, breakMin: 10, baseline: 2.5,
+  mealGap: 90, bigMealGap: 180, breakMin: 10, baseline: 2.5,
   capacity: { 1: 0, 2: 45, 3: 210, 4: 330, 5: 450 },
   restDay: null, restDayName: 'Rest day', dishDays: [], dinnerNote: '', heightIn: 70, cookMin: 45, cookFamilyMin: 60,
   flareLabel: 'Flare', shift: { title: 'Shift', travel: 0, lengths: [240, 480] }, workoutTitle: 'Workout',

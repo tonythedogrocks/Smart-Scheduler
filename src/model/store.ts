@@ -115,10 +115,21 @@ export const actions = {
       else (e.skip ||= []).push(date);
     });
   },
+  /** Confirm when a meal was actually eaten (minutes from midnight; default now), or clear it. */
+  ate(meal: 'lunch' | 'dinner', at?: number | null, big?: boolean) {
+    const t = nowTs(), mins = at ?? new Date(t).getHours() * 60 + new Date(t).getMinutes();
+    mutate((s) => {
+      const d = (s.days[today()] ||= {}); const cur = { ...(d.ate || {}) };
+      if (at === null) delete cur[meal]; else cur[meal] = { at: mins, ...(big ?? cur[meal]?.big ? { big: true } : {}) };
+      if (at !== null && big === false) delete cur[meal]!.big;
+      d.ate = cur;
+      if (meal === 'dinner' && at !== null) d.dinnerTap = mins;
+    });
+  },
   /** Dinner's called: dinner starts now, and the time teaches the usual dinner time. */
   dinnerNow() {
     const t = nowTs(), mins = new Date(t).getHours() * 60 + new Date(t).getMinutes();
-    mutate((s) => { const d = (s.days[today()] ||= {}); d.dinnerAt = mins; d.dinnerTap = mins; if (d.cook && !d.cookEnd) { d.cookEnd = t; d.cookStart ??= t - 1; } });
+    mutate((s) => { const d = (s.days[today()] ||= {}); d.dinnerAt = mins; d.dinnerTap = mins; d.ate = { ...(d.ate || {}), dinner: { at: mins } }; if (d.cook && !d.cookEnd) { d.cookEnd = t; d.cookStart ??= t - 1; } });
     toast('Dinner time. Enjoy it.');
   },
   /** Make a week's rest day a backup work day, or turn that back off. */

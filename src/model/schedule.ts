@@ -1,11 +1,11 @@
 import type { State, Evt } from './types';
-import { addDays, dateOf, minsOf, parseD, weekStart, weekday } from './time';
+import { addDays, dateOf, fmtT, minsOf, parseD, weekStart, weekday } from './time';
 import { cookMinutes } from './learn';
 
 export interface Block {
   key: string; start: number; end: number; title: string; sub?: string;
   kind: 'routine' | 'meal' | 'event' | 'travel' | 'offduty' | 'sleep' | 'note';
-  evtId?: string; meal?: 'lunch' | 'dinner'; blocking: boolean;
+  evtId?: string; meal?: 'lunch' | 'dinner'; blocking: boolean; ate?: boolean; big?: boolean;
 }
 
 /** The weekly rest day: essentials only. */
@@ -86,8 +86,16 @@ export function fixedBlocks(s: State, date: string): Block[] {
     busy.push([e.start - e.travel, e.end + e.travel]);
   }
   const free = (a: number, len: number) => !busy.some(([b0, b1]) => overlaps(a, a + len, b0, b1));
+  const day = s.days[date] || {};
   const place = (meal: 'lunch' | 'dinner', want: number, len: number, lo: number, hi: number) => {
     const title = meal === 'lunch' ? 'Lunch' : 'Dinner';
+    // a confirmed meal sits exactly where it happened
+    const got = day.ate?.[meal];
+    if (got) {
+      out.push({ key: `f:${meal}`, start: got.at, end: got.at + len, title, sub: `Ate at ${fmtT(got.at)}${got.big ? ' · large meal' : ''}`, kind: 'meal', meal, blocking: true, ate: true, big: got.big });
+      busy.push([got.at, got.at + len]);
+      return got.at + len;
+    }
     let at = -1;
     if (free(want, len)) at = want;
     else {
@@ -104,7 +112,6 @@ export function fixedBlocks(s: State, date: string): Block[] {
     busy.push([at, at + len]);
     return at + len;
   };
-  const day = s.days[date] || {};
   const lunchEnd = place('lunch', day.lunchAt ?? st.lunchAt, st.lunchMin, 660, 870);
   // Cooking: a block right before dinner that turns into dinner when it's done.
   let dinnerWant = day.dinnerAt ?? learnedDinner(s, date) ?? st.dinnerAt;

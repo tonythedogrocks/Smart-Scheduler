@@ -39,6 +39,13 @@ describe('sync merge', () => {
     expect(got.skills.length).toBe(3);
     expect(got.missions.length).toBe(15);
   });
+  it('copes with a copy from an older app version that lacks a collection', () => {
+    const old: any = structuredClone(sample()); delete old.achDefs; delete old.skills;
+    const cur = sample(); cur.achDefs = [{ id: 'x', title: 'X', sub: '', manual: true, t: 5 }];
+    expect(merge(cur, old).achDefs.length).toBe(1);
+    expect(merge(old, cur).achDefs.length).toBe(1);
+    expect(merge(old, cur).skills.length).toBe(3);
+  });
   it('merging is stable', () => {
     const a = edit(seed(), 10, (s) => { s.logs.push(log('a', 5)); });
     const m = merge(a, seed());

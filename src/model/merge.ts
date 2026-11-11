@@ -7,12 +7,12 @@ const bare = (r: any) => JSON.stringify({ ...r, t: undefined });
 /** Mark what a local change touched, so sync can merge record by record. */
 export function stamp(prev: State, next: State, t: number) {
   for (const c of COLS) {
-    const old = new Map((prev[c] as Rec[]).map((r) => [r.id, bare(r)]));
+    const old = new Map(((prev[c] || []) as Rec[]).map((r) => [r.id, bare(r)]));
     const ids = new Set<string>();
-    for (const r of next[c] as Rec[]) { ids.add(r.id); if (old.get(r.id) !== bare(r)) r.t = t; }
+    for (const r of (next[c] || []) as Rec[]) { ids.add(r.id); if (old.get(r.id) !== bare(r)) r.t = t; }
     for (const id of old.keys()) if (!ids.has(id)) (next.deleted ||= {})[id] = t;
   }
-  for (const [k, d] of Object.entries(next.days)) if (!prev.days[k] || bare(prev.days[k]) !== bare(d)) d.t = t;
+  for (const [k, d] of Object.entries(next.days || {})) if (!prev.days?.[k] || bare(prev.days[k]) !== bare(d)) d.t = t;
   if (JSON.stringify(prev.settings) !== JSON.stringify(next.settings)) next.settingsT = t;
   if (JSON.stringify(prev.running) !== JSON.stringify(next.running)) next.runningT = t;
 }
@@ -25,7 +25,8 @@ export function merge(a: State, b: State): State {
   for (const c of COLS) {
     const m = new Map<string, Rec>();
     const order: string[] = [];
-    for (const r of [...(a[c] as Rec[]), ...(b[c] as Rec[])]) {
+    // either copy may come from an older version of the app that lacks a collection
+    for (const r of [...((a[c] || []) as Rec[]), ...((b[c] || []) as Rec[])]) {
       const cur = m.get(r.id);
       if (!cur) { m.set(r.id, r); order.push(r.id); } else if ((r.t || 0) > (cur.t || 0)) m.set(r.id, r);
     }
@@ -33,7 +34,8 @@ export function merge(a: State, b: State): State {
   }
   out.logs.sort((x, y) => x.start - y.start);
   out.measures.sort((x, y) => x.date.localeCompare(y.date));
-  for (const [k, d] of Object.entries(b.days)) if (!out.days[k] || (d.t || 0) > (out.days[k].t || 0)) out.days[k] = structuredClone(d);
+  out.days ||= {};
+  for (const [k, d] of Object.entries(b.days || {})) if (!out.days[k] || (d.t || 0) > (out.days[k].t || 0)) out.days[k] = structuredClone(d);
   if ((b.settingsT || 0) > (a.settingsT || 0)) { out.settings = structuredClone(b.settings); out.settingsT = b.settingsT; }
   if ((b.runningT || 0) > (a.runningT || 0)) { out.running = b.running ? { ...b.running } : undefined; out.runningT = b.runningT; }
   for (const key of ['achievements', 'claimed'] as const) {

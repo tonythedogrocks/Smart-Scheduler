@@ -31,7 +31,8 @@ export const DEFAULT_SETTINGS: Settings = {
 /** Fill in settings added after a copy of the data was made. */
 export function withDefaults(s: State): State {
   s.settings = { ...DEFAULT_SETTINGS, ...s.settings, shift: { ...DEFAULT_SETTINGS.shift, ...(s.settings?.shift || {}) }, north: { ...DEFAULT_SETTINGS.north, ...(s.settings?.north || {}) } };
-  s.skills ||= []; s.achDefs ||= [];
+  for (const k of ['skills', 'achDefs', 'objectives', 'missions', 'events', 'logs', 'flares', 'doing', 'measures'] as const) (s as any)[k] ||= [];
+  s.days ||= {}; s.achievements ||= {};
   setAcronyms(s.settings.acronyms);
   return s;
 }

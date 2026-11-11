@@ -25,6 +25,7 @@ export const DEFAULT_SETTINGS: Settings = {
   capacity: { 1: 0, 2: 45, 3: 210, 4: 330, 5: 450 },
   restDay: null, restDayName: 'Rest day', dishDays: [], dinnerNote: '', heightIn: 70,
   flareLabel: 'Flare', shift: { title: 'Shift', travel: 0, lengths: [240, 480] }, workoutTitle: 'Workout',
+  exStart: 150, exTop: 450, exGrowth: 0.1,
   acronyms: [], north: { kicker: 'LIMIT BREAK:', title: 'YOUR GOAL!', sub: '', date: '', toWhat: 'go' },
 };
 

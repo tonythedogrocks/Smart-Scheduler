@@ -31,7 +31,7 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
   const s = S();
   const [flash, setFlash] = useState(false);
   const run = s.running;
-  const mine = !!run && run.missionId === p.missionId && !p.done;
+  const mine = !!run && run.missionId === p.missionId && run.step === p.step && !p.done;
   const mission = p.missionId ? s.missions.find((m) => m.id === p.missionId) : undefined;
   const sab = lib.rest;
   const success = p.act === 'mission' && (p.done || flash) && !mine;
@@ -50,7 +50,7 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
         {p.act === 'mission' && mission?.form === 'measure' && !p.done && !flash && <Measure />}
         {p.act === 'mission' && mission?.form !== 'measure' && !success && !mine && (
           <>
-            <button type="button" class="big go" disabled={!!run} onClick={() => actions.start(p.missionId!, p.units || 1, p.baseMin || mission?.minutes || 10)}>
+            <button type="button" class="big go" disabled={!!run} onClick={() => actions.start(p.missionId!, p.units || 1, p.baseMin || mission?.minutes || 10, p.step)}>
               <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z" /></svg>
               <span>START!</span>
             </button>

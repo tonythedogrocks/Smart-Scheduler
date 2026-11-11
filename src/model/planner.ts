@@ -1,7 +1,7 @@
 import type { State, Mission, Level, Objective } from './types';
 import { addDays, dateOf, diffDays, minsOf, weekStart, weekday } from './time';
 import { fixedBlocks, freeSlots, isRest, type Block } from './schedule';
-import { capacityAt, factor, flareSpike, predictLevel, workMinOn } from './learn';
+import { afterStats, bestParts, capacityAt, choreDue, exerciseCeiling, exerciseMinWeek, factor, flareSpike, isExercise, partOf, predictLevel, workMinOn } from './learn';
 
 export interface Alloc { missionId: string; units: number; baseMin: number; min: number; habit?: boolean; clock?: boolean }
 export interface DayAlloc { date: string; level: number; rest: boolean; blocks: Alloc[]; capMin: number }
@@ -11,7 +11,7 @@ export interface Forecast { today: string; days: DayAlloc[]; landing: Record<str
 export interface PlanItem {
   key: string; start: number; end: number; title: string; sub?: string; detail?: string;
   kind: 'mission' | 'fixed';
-  missionId?: string; units?: number; baseMin?: number; min?: number;
+  missionId?: string; units?: number; baseMin?: number; min?: number; step?: number;
   done?: boolean; running?: boolean; now?: boolean; past?: boolean;
   block?: Block;
 }
@@ -70,6 +70,10 @@ export function forecast(s: State, now: number): Forecast {
   const dues = objs.filter((o) => o.due).map((o) => diffDays(today, o.due!));
   const H = clamp(Math.max(14, ...dues.map((d) => d + 30)), 14, 150);
   const eased = flareSpike(s, now);
+  // Weekly exercise ceiling (base routines never count against it).
+  const exCap = exerciseCeiling(s, today).cap;
+  const exUsed = new Map<string, number>();
+  const exOf = (date: string) => { const w = weekStart(date); if (!exUsed.has(w)) exUsed.set(w, exerciseMinWeek(s, w)); return exUsed.get(w)!; };
   const baseCap = Math.max(30, capacityAt(s, s.settings.baseline, today));
   const weekMin = new Map<string, number>();
   const wk = (id: string, date: string) => `${id}|${weekStart(date)}`;
@@ -134,9 +138,10 @@ export function forecast(s: State, now: number): Forecast {
       let best: { m: Mission; score: number; u: number; min: number } | null = null;
       for (const m of live) {
         // a 2.5 baseline day is a blend of Standby and On Duty, so On Duty work is eligible
-        if (m.kind === 'habit' || Math.ceil(level) < m.minLevel) continue;
+        if (m.kind === 'habit' || m.kind === 'chore' || Math.ceil(level) < m.minLevel) continue;
         if (rest && !m.restOk) continue;
         if (m.workout && eased) continue;
+        const ex = isExercise(m);
         const o = s.objectives.find((x) => x.id === m.objectiveId);
         if (o?.done) continue;
         const ff = f.get(m.id)!;
@@ -160,6 +165,7 @@ export function forecast(s: State, now: number): Forecast {
           const wd = weekMin.get(wk(m.id, date)) || 0;
           score = 0.6 * Math.max(0.15, 1 - wd / (m.weeklyMin || 120));
         }
+        if (ex && exOf(date) + min > exCap) continue;
         const nd = need.get(m.id);
         // Behind today's pace for a real deadline: nearest deadline goes first.
         if (nd && capMin - cap < capMin * PACE_SHARE && (usedMis.get(m.id) || 0) + doneTodayMin(m.id) < nd.min) score = 1000 - nd.dueIn;
@@ -172,6 +178,7 @@ export function forecast(s: State, now: number): Forecast {
       const { m, u, min } = best;
       blocks.push({ missionId: m.id, units: u, baseMin: m.kind === 'work' ? u * m.minutes : m.minutes, min, clock: m.clock });
       cap -= min;
+      if (isExercise(m)) exUsed.set(weekStart(date), exOf(date) + min);
       usedObj.set(m.objectiveId, (usedObj.get(m.objectiveId) || 0) + 1);
       usedMis.set(m.id, (usedMis.get(m.id) || 0) + min);
       const sk = s.objectives.find((x) => x.id === m.objectiveId)?.skillId || '';
@@ -240,27 +247,31 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
 
   for (const l of s.logs.filter((x) => x.date === date && x.done && x.end > 0).sort((a, b) => a.start - b.start)) {
     const m = byId.get(l.missionId); if (!m) continue;
-    items.push({ key: keyFor(m.id), start: minsOf(l.start), end: Math.max(minsOf(l.start) + 1, minsOf(l.end)), title: m.kind === 'habit' ? habitTitle(m, l.level ?? level) : m.title, sub: `${Math.max(1, Math.round((l.end - l.start) / 60000))} min`, detail: m.note, kind: 'mission', missionId: m.id, done: true });
+    const stepT = l.step !== undefined ? m.steps?.[l.step]?.title : undefined;
+    items.push({ key: l.step !== undefined ? `c:${m.id}:${l.step}` : keyFor(m.id), start: minsOf(l.start), end: Math.max(minsOf(l.start) + 1, minsOf(l.end)), title: stepT || (m.kind === 'habit' ? habitTitle(m, l.level ?? level) : m.title), sub: `${Math.max(1, Math.round((l.end - l.start) / 60000))} min`, detail: m.note, kind: 'mission', missionId: m.id, done: true });
   }
   if (date < today) return items.sort((a, b) => a.start - b.start);
   if (!isToday) return items.sort((a, b) => a.start - b.start);
 
   let slots = freeSlots(fixed, round5(nowMin));
-  const take = (len: number, notBefore = 0, forbid: [number, number][] = []): number => {
+  /** First start at or after notBefore that fits, avoiding forbidden windows. Does not reserve it. */
+  const find = (len: number, notBefore = 0, forbid: [number, number][] = []): { i: number; a: number } | null => {
     for (let i = 0; i < slots.length; i++) {
-      let [a, b] = slots[i];
-      a = Math.max(a, notBefore);
-      for (const [f0, f1] of forbid) if (a < f1 && f0 < a + len) a = f1;
-      if (b - a >= len) {
-        const rest: [number, number][] = [];
-        if (a - slots[i][0] >= 5) rest.push([slots[i][0], a]);
-        if (b - (a + len) >= 5) rest.push([a + len, b]);
-        slots.splice(i, 1, ...rest);
-        return a;
-      }
+      let a = Math.max(slots[i][0], notBefore);
+      for (let moved = true; moved;) { moved = false; for (const [f0, f1] of forbid) if (a < f1 && f0 < a + len) { a = f1; moved = true; } }
+      if (slots[i][1] - a >= len) return { i, a };
     }
-    return -1;
+    return null;
   };
+  const carve = (a: number, len: number) => {
+    const i = slots.findIndex(([x, y]) => x <= a && a + len <= y);
+    if (i < 0) { slots = slots.flatMap(([x, y]) => (y <= a || x >= a + len ? [[x, y]] : [[x, a], [a + len, y]].filter(([p, q]) => q - p >= 5)) as [number, number][]); return; }
+    const [x, y] = slots[i], rest: [number, number][] = [];
+    if (a - x >= 5) rest.push([x, a]);
+    if (y - (a + len) >= 5) rest.push([a + len, y]);
+    slots.splice(i, 1, ...rest);
+  };
+  const stepTitle = (m: Mission, i: number) => (m.steps && m.steps[i] ? m.steps[i].title : m.title);
   const run = s.running;
   if (run) {
     const m = byId.get(run.missionId);
@@ -269,17 +280,68 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
       const min = Math.round(run.plannedMin * factor(s, m.id));
       const end = Math.max(round5(nowMin), st + min);
       slots = slots.flatMap(([a, b]) => (b <= end ? [] : [[Math.max(a, end), b] as [number, number]]));
-      items.push({ key: keyFor(m.id), start: st, end, title: m.kind === 'habit' ? habitTitle(m, level) : m.title, sub: label(m, min, run.units), detail: m.note, kind: 'mission', missionId: m.id, units: run.units, baseMin: run.plannedMin, min, running: true });
+      const title = run.step !== undefined ? stepTitle(m, run.step) : m.kind === 'habit' ? habitTitle(m, level) : m.title;
+      items.push({ key: run.step !== undefined ? `c:${m.id}:${run.step}` : keyFor(m.id), start: st, end, title, sub: label(m, min, run.units), detail: m.note, kind: 'mission', missionId: m.id, units: run.units, baseMin: run.plannedMin, min, step: run.step, running: true });
     }
   }
+
+  // Chores with steps: every step needs you home, the time between steps is free.
+  for (const m of s.missions) {
+    if (m.kind !== 'chore' || m.archived || (isRest(s, date) && !m.restOk)) continue;
+    const steps = m.steps?.length ? m.steps : [{ at: 0, min: m.minutes, title: m.title }];
+    const doneSteps = new Set(s.logs.filter((l) => l.missionId === m.id && l.date === date && l.done && l.step !== undefined).map((l) => l.step!));
+    if (doneSteps.has(steps.length - 1)) continue;
+    const first = s.logs.filter((l) => l.missionId === m.id && l.date === date && l.step === 0).sort((x, y) => x.start - y.start)[0];
+    let anchor = -1;
+    if (first) anchor = minsOf(first.start);
+    else if (run?.missionId === m.id && run.step === 0) anchor = minsOf(run.startedAt);
+    else {
+      const due = choreDue(s, m);
+      if (!due || due > date) continue;
+      const off = fixed.find((x) => x.kind === 'offduty')!.start;
+      for (let t = round5(nowMin); t + steps[steps.length - 1].at + steps[steps.length - 1].min <= off; t += 5) {
+        if (steps.every((st) => slots.some(([x, y]) => x <= t + st.at && t + st.at + st.min <= y))) { anchor = t; break; }
+      }
+      if (anchor < 0) continue; // no stretch at home long enough today: it waits, quietly
+    }
+    steps.forEach((st, i) => {
+      if (doneSteps.has(i) || (run?.missionId === m.id && run.step === i)) return;
+      const at = Math.max(anchor + st.at, i === 0 ? 0 : round5(nowMin));
+      carve(at, st.min);
+      items.push({ key: `c:${m.id}:${i}`, start: at, end: at + st.min, title: st.title, sub: `${st.min} min · step ${i + 1} of ${steps.length}`, detail: 'Be home for each step. The time between steps is free.', kind: 'mission', missionId: m.id, units: 1, baseMin: st.min, min: st.min, step: i });
+    });
+  }
+
   const day = fc.days[0];
   const gap = s.settings.mealGap;
   const meals: [number, number][] = fixed.filter((b) => b.kind === 'meal').map((b) => [b.start, b.end + gap]);
+  // Learned patterns, used only once they're confident.
+  const avoid = new Map<string, Set<string>>();
+  for (const a of afterStats(s)) if (a.worse) (avoid.get(a.energy) || avoid.set(a.energy, new Set()).get(a.energy)!).add(a.after);
+  const evKind = new Map(s.events.map((e) => [e.id, e.kind === 'event' || e.kind === 'exam' ? 'event' : e.kind]));
+  const catOf = (it: PlanItem): string | null => {
+    if (it.kind === 'fixed') return it.block?.evtId && it.block.kind !== 'travel' ? evKind.get(it.block.evtId) || null : null;
+    const m = it.missionId ? byId.get(it.missionId) : undefined;
+    return !m || m.energy === 'none' || m.kind === 'chore' ? null : isExercise(m) ? 'workout' : m.energy;
+  };
+  const PART_START = [0, 660, 810, 1050], PART_END = [660, 810, 1050, 1440];
   const order = [...day.blocks].sort((a, b) => Number(!!b.habit) - Number(!!a.habit) || Number(!!b.clock) - Number(!!a.clock));
   for (const a of order) {
     const m = byId.get(a.missionId); if (!m) continue;
-    const at = take(a.min, 0, m.workout ? meals : []);
-    if (at < 0) continue; // doesn't fit today: back to the pool, silently
+    const forbid = m.workout ? [...meals] : [];
+    const bad = !a.habit ? avoid.get(m.energy) : undefined;
+    const soft: [number, number][] = [];
+    if (bad) for (const it of items) { const c = catOf(it); if (c && bad.has(c)) soft.push([it.end, it.end + 45]); }
+    let got: { i: number; a: number } | null = null;
+    const prefs = !a.habit ? bestParts(s, m.energy) : null;
+    for (const fb of soft.length ? [[...forbid, ...soft], forbid] : [forbid]) {
+      if (prefs) for (const part of prefs) { const g = find(a.min, PART_START[part], fb); if (g && g.a < PART_END[part]) { got = g; break; } }
+      got ||= find(a.min, 0, fb);
+      if (got) break;
+    }
+    if (!got) continue; // doesn't fit today: back to the pool, silently
+    const at = got.a;
+    carve(at, a.min);
     if (!a.habit && a.min >= 45) {
       // breathing room after a real block
       slots = slots.map(([x, y]) => (x === at + a.min ? [x + s.settings.breakMin, y] : [x, y]) as [number, number]).filter(([x, y]) => y - x >= 5);

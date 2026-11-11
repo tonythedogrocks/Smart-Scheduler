@@ -70,8 +70,8 @@ export const actions = {
     mutate((s) => { const d = (s.days[today()] ||= {}); d.level = level; d.setAt = nowTs(); });
     setLocal({ status: false });
   },
-  start(missionId: string, units: number, plannedMin: number) {
-    mutate((s) => { if (!s.running) s.running = { missionId, units, plannedMin, startedAt: nowTs() }; });
+  start(missionId: string, units: number, plannedMin: number, step?: number) {
+    mutate((s) => { if (!s.running) s.running = { missionId, units, plannedMin, startedAt: nowTs(), ...(step !== undefined ? { step } : {}) }; });
   },
   /** done=false: stop here. Time still counts; the work quietly goes back to the pool. */
   finish(done: boolean) {
@@ -79,7 +79,7 @@ export const actions = {
     mutate((s) => {
       const r = s.running; if (!r) return;
       const date = today(), end = nowTs();
-      const log: Log = { id: uid(), missionId: r.missionId, date, start: r.startedAt, end, plannedMin: r.plannedMin, units: done ? r.units : 0, done, level: s.days[date]?.level, xp: Math.round(Math.min((end - r.startedAt) / 60000, Math.max(r.plannedMin * 2, 10))) };
+      const log: Log = { id: uid(), missionId: r.missionId, date, start: r.startedAt, end, plannedMin: r.plannedMin, units: done ? r.units : 0, done, level: s.days[date]?.level, xp: Math.round(Math.min((end - r.startedAt) / 60000, Math.max(r.plannedMin * 2, 10))), ...(r.step !== undefined ? { step: r.step } : {}) };
       s.logs.push(log);
       s.running = undefined;
       const m = s.missions.find((x) => x.id === r.missionId);

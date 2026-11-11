@@ -3,7 +3,7 @@ import { achievements, heroLevel, xpOf } from '../model/game';
 import { Choice } from './Choice';
 import type { Library } from '../model/vm';
 import { addDays, dateOf, fmtDate, fmtDay, fmtDur, fmtT, nowTs, weekStart } from '../model/time';
-import { contextStats, crashAfter5, exerciseMinWeek, factor, flareStats, followThrough, learnedCapacity } from '../model/learn';
+import { afterStats, choreDue, choreInterval, choreLast, contextStats, crashAfter5, exerciseCeiling, factor, flareStats, followThrough, learnedCapacity } from '../model/learn';
 import { eventsOn } from '../model/schedule';
 import { levelName, nice } from '../model/seed';
 import { fromHM, toHM } from './bits';
@@ -46,7 +46,11 @@ export function Debrief({ lib }: { lib: Library }) {
   for (const n of [1, 2, 3, 4, 5] as Level[]) if (lc[n] && lc[n]!.n >= 3) learned.push(`A ${nice(levelName(n))} day really gets about ${fmtDur(lc[n]!.mean)} of focused work done.`);
   if (crash.confident) learned.push(`The day after Plus Ultra averages level ${crash.after.toFixed(1)}. Those days are now planned light.`);
   if (ft.n >= 10) learned.push(`${Math.round(ft.rate * 100)}% of started work gets finished in one go.`);
-  for (const c of ctx) if (c.rate <= 0.6 || c.rate >= 0.9) learned.push(`${c.energy[0].toUpperCase() + c.energy.slice(1)} work in the ${c.part.toLowerCase()} gets finished ${Math.round(c.rate * 100)}% of the time.`);
+  for (const c of ctx) if (c.rate <= 0.6 || c.rate >= 0.9) learned.push(`${c.energy[0].toUpperCase() + c.energy.slice(1)} work in the ${c.part.toLowerCase()} gets finished ${Math.round(c.rate * 100)}% of the time.${c.n >= 8 ? ' Plans now lean toward your better times.' : ''}`);
+  const plannable = new Set(['shift', 'workout', 'event', 'physical', 'mental', 'social']);
+  for (const a of afterStats(s)) learned.push(`${a.energy[0].toUpperCase() + a.energy.slice(1)} work right after ${a.after === 'event' ? 'an event' : a.after === 'workout' ? 'a workout' : a.after === 'shift' ? 'a shift' : a.after === 'physical' || a.after === 'mental' || a.after === 'social' ? a.after + ' work' : a.after} gets finished ${Math.round(a.rate * 100)}% of the time, against ${Math.round(a.usual * 100)}% usually.${a.worse && plannable.has(a.after) ? ' Plans now leave a gap after it.' : ''}`);
+  const ex = exerciseCeiling(s, today);
+  if (ex.growing && Object.keys(s.days).length > 7) learned.push(`Exercise ceiling is up to ${ex.cap} min a week.`);
   for (const b of fl.before) learned.push(`${b.t} came before ${b.c} of ${fl.n} ${s.settings.flareLabel.toLowerCase()}s.`);
   if (lib.fc.eased) learned.push(`${s.settings.flareLabel}s are up, so workouts are eased for now. Daily basics stay.`);
   const nws = addDays(ws, 7);
@@ -58,7 +62,7 @@ export function Debrief({ lib }: { lib: Library }) {
       <div class="card narrow">
         <h2>THIS WEEK</h2>
         <div class="days7">{days.map((d) => <span><span>{fmtDay(d).slice(0, 3)}</span><b>{s.days[d]?.level ?? '·'}</b></span>)}</div>
-        <p>{floors} {floors === 1 ? 'day' : 'days'} at the floor · Level {hero.level} · {xpOf(s)} XP · {Math.round(exerciseMinWeek(s, ws))} min of exercise</p>
+        <p>{floors} {floors === 1 ? 'day' : 'days'} at the floor · Level {hero.level} · {xpOf(s)} XP · {Math.round(ex.done)} of {ex.cap} min of exercise</p>
         <ul>{bySkill.filter((x) => x.min >= 1).map((x) => <li>{nice(x.k.title)}: {fmtDur(x.min)}</li>)}</ul>
         {!logs.length && <p class="soft">Nothing logged yet this week.</p>}
       </div>
@@ -121,6 +125,7 @@ export function Settings() {
           </div>
         ))}
       </div>
+      <Chores />
       <div class="card narrow">
         <h2>PLANNING</h2>
         <p>Deadlines are planned against a modest day, so good days build a buffer and bad days spend it.</p>
@@ -178,6 +183,28 @@ function SyncCard() {
           <button type="button" class="small on" style="align-self:flex-start" disabled={!repo.includes('/') || token.length < 20} onClick={() => { setCfg({ repo, token }); setToken(''); syncNow(); }}>Connect</button>
         </>
       )}
+    </div>
+  );
+}
+
+function Chores() {
+  const s = S(), list = s.missions.filter((m) => m.kind === 'chore' && !m.archived);
+  if (!list.length) return null;
+  return (
+    <div class="card narrow">
+      <h2>CHORES</h2>
+      {list.map((m) => {
+        const iv = choreInterval(s, m), last = choreLast(s, m), due = choreDue(s, m);
+        return (
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <p><b>{m.title}</b> · about every {iv.days} days{iv.learned ? ' (learned)' : ''} · {last ? `last done ${fmtDate(last)}, next about ${fmtDate(due!)}` : 'not done in the app yet'}</p>
+            <div class="row">
+              <button type="button" class="small on" disabled={!!s.running} onClick={() => { actions.start(m.id, 1, m.steps?.[0]?.min || m.minutes, 0); toast(`${m.steps?.[0]?.title || m.title}: started`); }}>Starting it now</button>
+              <button type="button" class="small" onClick={() => setLocal({ sheet: 'mission', sheetArg: m.id })}>Edit</button>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

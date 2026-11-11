@@ -16,7 +16,7 @@ export interface Objective {
 export interface Mission {
   t?: number; // last change, for sync
   id: string; objectiveId: string; title: string;
-  kind: 'habit' | 'work' | 'practice';
+  kind: 'habit' | 'work' | 'practice' | 'chore';
   energy: Energy;
   minutes: number;         // habit: session; work: minutes per unit; practice: block
   minutesAt5?: number;     // habit on Plus Ultra
@@ -32,6 +32,8 @@ export interface Mission {
   workout?: boolean;       // respects meal gaps, eases when flares spike
   restOk?: boolean;        // still runs on the weekly rest day
   form?: 'measure';
+  steps?: { at: number; min: number; title: string }[]; // chore: hands-on moments, minutes from the start; must be home for each
+  lastAt?: string;         // chore: last done before the app knew
   note?: string;
   doneAt?: string;
   archived?: boolean;
@@ -43,6 +45,7 @@ export interface Evt {
   kind: 'shift' | 'workout' | 'event' | 'chore' | 'exam';
   date?: string;           // one-off
   weekday?: number;        // weekly (0 = Sunday)
+  nth?: number[];          // with weekday: only these weeks of the month (1-5; 5 = last)
   start: number; end: number; // minutes from midnight
   travel: number;          // each way
   note?: string;
@@ -56,7 +59,7 @@ export interface Log {
   t?: number; // last change, for sync
   id: string; missionId: string; date: string;
   start: number; end: number;          // timestamps (ms)
-  plannedMin: number; units: number; done: boolean; level?: Level; xp?: number;
+  plannedMin: number; units: number; done: boolean; level?: Level; xp?: number; step?: number;
 }
 
 export interface DayRec { t?: number; level?: Level; setAt?: number; floorAwarded?: boolean; lunchAt?: number; dinnerAt?: number; starts?: Record<string, number> }
@@ -75,12 +78,13 @@ export interface Settings {
   shift: { title: string; travel: number; lengths: number[] };
   workoutTitle: string;
   acronyms: string[];       // words kept in capitals in titles
+  exStart: number; exTop: number; exGrowth: number; // weekly exercise ceiling: start, top, growth per good week
   north: { kicker: string; title: string; sub: string; date: string; toWhat: string };
 }
 
 export interface AchDef { id: string; t?: number; title: string; sub: string; objectiveId?: string; missionId?: string; count?: number; manual?: boolean }
 
-export interface Running { missionId: string; units: number; plannedMin: number; startedAt: number }
+export interface Running { missionId: string; units: number; plannedMin: number; startedAt: number; step?: number }
 
 export interface State {
   v: 1;

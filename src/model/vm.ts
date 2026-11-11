@@ -2,27 +2,27 @@ import type { State, Mission } from './types';
 import { addDays, dateOf, diffDays, fmtDate, fmtDay, fmtDur, fmtT, minsOf, weekStart, weekday } from './time';
 import { forecast, layoutDay, orders, habitMin, habitTitle, habitsDue, type Forecast, type PlanItem } from './planner';
 import { levelName, nice } from './seed';
-import { bodyFat, exerciseMinWeek, factor, partOf } from './learn';
+import { bodyFat, choreDue, choreInterval, choreLast, exerciseCeiling, factor, partOf } from './learn';
 import { eventsOn, isRest } from './schedule';
 
 export interface PanelVM {
   key: string; h: string; t: string; m?: string; d?: string; wide?: boolean;
   now?: boolean; done?: boolean; running?: boolean; alert?: boolean;
-  missionId?: string; units?: number; baseMin?: number; min?: number;
+  missionId?: string; units?: number; baseMin?: number; min?: number; step?: number;
   act?: 'mission' | 'meal' | 'choice' | 'event' | 'objective' | 'info';
   evtId?: string; date?: string; objectiveId?: string; meal?: 'lunch' | 'dinner'; editable?: boolean;
 }
 export interface ChapterVM { title: string; panels: PanelVM[] }
 export interface IssueVM { key: string; title: string; sub: string; badge?: string; chapters: ChapterVM[] }
 export interface CollectionVM { key: string; title: string; sub: string; bg: string; fg: string; issues: IssueVM[] }
-export interface Library { cols: CollectionVM[]; fc: Forecast; today: string; todayItems: PlanItem[]; resume: { title: string; sub: string; ch: number; p: string } | null; rest: boolean }
+export interface Library { cols: CollectionVM[]; fc: Forecast; today: string; todayItems: PlanItem[]; resume: { title: string; sub: string; ch: number; p: string } | null; rest: boolean; ahead: { title: string; date: string }[] }
 
 const CH = ['MORNING', 'MIDDAY', 'AFTERNOON', 'EVENING'];
 
 function itemPanel(s: State, it: PlanItem, date: string, isToday: boolean): PanelVM {
   const b = it.block;
   if (it.kind === 'mission') {
-    return { key: it.key, h: it.now && !it.running ? 'NOW' : fmtT(it.start), t: it.title, m: it.sub, d: it.detail, now: it.now, done: it.done, running: it.running, missionId: it.missionId, units: it.units, baseMin: it.baseMin, min: it.min, act: 'mission', wide: it.now || (it.min || 0) >= 60, date };
+    return { key: it.key, h: it.now && !it.running ? 'NOW' : fmtT(it.start), t: it.title, m: it.sub, d: it.detail, now: it.now, done: it.done, running: it.running, missionId: it.missionId, units: it.units, baseMin: it.baseMin, min: it.min, step: it.step, editable: s.missions.find((m) => m.id === it.missionId)?.kind === 'chore', act: 'mission', wide: it.now || (it.min || 0) >= 60, date };
   }
   const h = b!.kind === 'note' ? (b!.meal === 'lunch' ? 'LUNCH' : 'DINNER') : it.now && isToday ? 'NOW' : fmtT(it.start);
   return {
@@ -55,6 +55,11 @@ function dayIssue(s: State, fc: Forecast, date: string, now: number): { issue: I
     const panels = fx.map((i) => itemPanel(s, i, date, false));
     const day = fc.days.find((d) => d.date === date);
     const work = (day?.blocks || []).filter((b) => !b.habit);
+    for (const m of s.missions) {
+      if (m.kind !== 'chore' || m.archived || (sab && !m.restOk)) continue;
+      const due = choreDue(s, m);
+      if (due === date) panels.unshift({ key: `due:${m.id}`, h: 'DUE', t: m.title, m: 'Planned on the day around being home', act: 'info', wide: true });
+    }
     if (sab) panels.splice(panels.findIndex((p) => p.t === 'Off Duty'), 0,
       { key: 'ess', h: 'DAY', t: 'Essentials only', wide: true, act: 'info' },
       { key: 'debrief', h: 'EVE', t: 'Debrief', m: 'Progress, what the app learned, next week', act: 'info' },
@@ -74,6 +79,14 @@ const cap1 = (x: string) => x[0].toUpperCase() + x.slice(1);
 
 function missionPanel(s: State, m: Mission, level: number): PanelVM {
   const f = factor(s, m.id);
+  if (m.kind === 'chore') {
+    const steps = m.steps?.length ? m.steps : [{ at: 0, min: m.minutes, title: m.title }];
+    const iv = choreInterval(s, m), last = choreLast(s, m), due = choreDue(s, m);
+    const span = steps[steps.length - 1].at + steps[steps.length - 1].min;
+    return { key: `mi:${m.id}`, h: 'CHORE', t: m.title, m: `${steps.reduce((a, x) => a + x.min, 0)} min hands-on over ${fmtDur(span)} · about every ${iv.days} days${iv.learned ? ' (learned)' : ''}`,
+      d: last ? `Last done ${fmtDate(last)}. Next one is planned for about ${fmtDate(due!)}.` : 'Not planned until it has been done once. Start it here when you run it, or set the last time in Edit.',
+      missionId: m.id, units: 1, baseMin: steps[0].min, min: steps[0].min, step: 0, act: 'mission', editable: true };
+  }
   if (m.kind === 'habit') {
     const base = habitMin(m, level);
     const bits = [`${Math.round(base * f)} min`, m.everyDays ? (m.everyDays === 2 ? 'every other day' : `every ${m.everyDays} days`) : 'daily'];
@@ -117,8 +130,8 @@ export function buildLibrary(s: State, now: number): Library {
         stand.push({ key: 'progress', h: 'PROGRESS', t: `${Math.round(100 * (1 - left / Math.max(1, total)))}% · about ${fmtDur(left)} to go`, wide: true, act: 'info' });
       }
       if (o.id === 'volume') {
-        const min = Math.round(exerciseMinWeek(s, ws));
-        stand.push({ key: 'progress', h: 'THIS WEEK', t: `${min} min of exercise logged`, m: 'HHS minimum is 150 to 300 min moderate a week. Ramp slowly.', wide: true, act: 'info' });
+        const ex = exerciseCeiling(s, today);
+        stand.push({ key: 'progress', h: 'THIS WEEK', t: `${Math.round(ex.done)} of ${ex.cap} min of exercise`, m: `This week's ceiling. It grows about ${Math.round(s.settings.exGrowth * 100)}% a week once most of it gets done and flares stay quiet, up to ${s.settings.exTop} min. Daily base routines never count against it.`, wide: true, act: 'info' });
       }
       if (o.id === 'physique' && s.measures.length) {
         const m = s.measures[s.measures.length - 1];
@@ -152,7 +165,12 @@ export function buildLibrary(s: State, now: number): Library {
     resume = { title: cur.title.toUpperCase(), sub: `Today · ${cap1(CH[ch].toLowerCase())} · ${od.now ? (cur.kind === 'mission' ? (rest ? 'now' : 'current mission') : 'now') : 'up next at ' + fmtT(cur.start)}`, ch, p: cur.key };
   }
   void eventsOn; void dateOf; void minsOf;
-  return { cols, fc, today, todayItems, resume, rest };
+  // Heads-up a day or two before a repeating chore is needed.
+  const ahead = s.missions.filter((m) => m.kind === 'chore' && !m.archived).flatMap((m) => {
+    const due = choreDue(s, m);
+    return due && due > today && due <= addDays(today, 2) ? [{ title: m.title, date: due }] : [];
+  });
+  return { cols, fc, today, todayItems, resume, rest, ahead };
 }
 
 /** The floor line shown on the Status Report for a level. */

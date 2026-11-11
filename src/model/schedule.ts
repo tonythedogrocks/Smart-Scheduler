@@ -1,5 +1,5 @@
 import type { State, Evt } from './types';
-import { addDays, weekday } from './time';
+import { addDays, parseD, weekday } from './time';
 
 export interface Block {
   key: string; start: number; end: number; title: string; sub?: string;
@@ -10,10 +10,17 @@ export interface Block {
 /** The weekly rest day: essentials only. */
 export const isRest = (s: State, date: string) => s.settings.restDay !== null && weekday(date) === s.settings.restDay;
 
+/** Which week of the month a date falls in (1-4), and whether it is the last one. */
+export function inWeeks(date: string, nth: number[]): boolean {
+  const d = parseD(date), n = Math.ceil(d.getDate() / 7);
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - d.getDate() < 7;
+  return nth.includes(n) || (last && nth.includes(5));
+}
+
 export function eventsOn(s: State, date: string): Evt[] {
   const wd = weekday(date);
   return s.events
-    .filter((e) => (e.date ? e.date === date : e.weekday === wd) && !(e.skip || []).includes(date))
+    .filter((e) => (e.date ? e.date === date : e.weekday === wd && (!e.nth || inWeeks(date, e.nth))) && !(e.skip || []).includes(date))
     .map((e) => {
       const st = e.choices ? s.days[date]?.starts?.[e.id] : undefined;
       return st === undefined ? e : { ...e, start: st, end: st + (e.end - e.start) };

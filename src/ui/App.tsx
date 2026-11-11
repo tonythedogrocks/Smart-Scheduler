@@ -1,7 +1,7 @@
 import { useEffect } from 'preact/hooks';
 import { S, L, actions, go, setLocal, type Nav } from '../model/store';
 import { buildLibrary, type PanelVM } from '../model/vm';
-import { dateOf, fmtDate, nowTs, diffDays } from '../model/time';
+import { addDays, dateOf, fmtDate, fmtDay, nowTs, diffDays } from '../model/time';
 import { levelName } from '../model/seed';
 import { heroLevel, xpOf } from '../model/game';
 import { Arrow, useStore, useTick } from './bits';
@@ -110,6 +110,12 @@ export function App() {
                 })}
               </div>
             </div>
+            {lib.ahead.map((a) => (
+              <div class="alert" style="box-shadow:4px 4px 0 var(--ink)">
+                <span class="k" style="color:var(--ink)">COMING UP: {a.title.toUpperCase()}</span>
+                <span>Needed about {fmtDay(a.date) === fmtDay(addDays(today, 1)) ? 'tomorrow' : fmtDate(a.date)}. It will be planned around when you're home.</span>
+              </div>
+            ))}
             {!s.skills.length && (
               <button type="button" class="alert" style="box-shadow:4px 4px 0 var(--ink)" onClick={() => go({ view: 'settings' })}>
                 <span class="k" style="color:var(--ink)">NOTHING ON THE SHELF YET</span>

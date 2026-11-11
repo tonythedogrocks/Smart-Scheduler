@@ -1,5 +1,5 @@
 import type { State, Level, Mission } from './types';
-import { addDays, dateOf, minsOf, weekday } from './time';
+import { addDays, dateOf, diffDays, minsOf, parseD, weekStart, weekday } from './time';
 import { isRest } from './schedule';
 
 const mins = (l: { start: number; end: number }) => (l.end > 0 ? Math.max(1, (l.end - l.start) / 60000) : 0);
@@ -105,12 +105,109 @@ export function flareSpike(s: State, now: number): boolean {
   return recent.length >= 2 || recent.some((f) => (f.rating ?? 0) >= 7 && f.ts > now - 2 * 86400000);
 }
 
+/** Missions that count toward weekly exercise. Daily base routines (habits) never do. */
+export const isExercise = (m?: Mission) => !!m && m.kind !== 'habit' && m.kind !== 'chore' && (!!m.workout || m.energy === 'physical');
+
 export function exerciseMinWeek(s: State, weekStartDate: string): number {
   const ph = new Map<string, Mission>(s.missions.map((m) => [m.id, m]));
   const end = addDays(weekStartDate, 7);
-  let t = s.logs.filter((l) => l.date >= weekStartDate && l.date < end && ph.get(l.missionId)?.energy === 'physical').reduce((a, l) => a + mins(l), 0);
+  let t = s.logs.filter((l) => l.date >= weekStartDate && l.date < end && isExercise(ph.get(l.missionId))).reduce((a, l) => a + mins(l), 0);
   for (const e of s.events) if (e.date && e.date >= weekStartDate && e.date < end && e.kind === 'workout') t += e.exerciseMin ?? e.end - e.start;
   return t;
+}
+
+const spikeIn = (s: State, from: number, to: number) => {
+  const f = s.flares.filter((x) => x.ts >= from && x.ts < to);
+  return f.length >= 2 || f.some((x) => (x.rating ?? 0) >= 7);
+};
+
+/**
+ * Weekly exercise ceiling. Starts at the low end of the guideline and grows about 10% a week,
+ * but only after a week where most of it was actually done and flares stayed quiet.
+ * A week with a flare spike steps it back. Never below the start or above the top.
+ */
+export function exerciseCeiling(s: State, today: string): { cap: number; done: number; growing: boolean } {
+  const { exStart, exTop, exGrowth } = s.settings;
+  const first = Object.keys(s.days).sort()[0] || today;
+  let wk = weekStart(first <= today ? first : today), cap = exStart, growing = true;
+  const cur = weekStart(today);
+  while (wk < cur) {
+    const t0 = parseD(wk).getTime() - 12 * 3600000, t1 = t0 + 7 * 86400000;
+    if (spikeIn(s, t0, t1)) { cap = Math.max(exStart, cap * (1 - exGrowth)); growing = false; }
+    else if (exerciseMinWeek(s, wk) >= cap * 0.6) { cap = Math.min(exTop, cap * (1 + exGrowth)); growing = true; }
+    else growing = false;
+    wk = addDays(wk, 7);
+  }
+  return { cap: Math.round(cap / 5) * 5, done: exerciseMinWeek(s, cur), growing };
+}
+
+/** Days between runs of a repeating chore: the mission's setting until there are 2 real gaps to learn from. */
+export function choreInterval(s: State, m: Mission): { days: number; learned: boolean } {
+  const ends = [...new Set(s.logs.filter((l) => l.missionId === m.id && l.done && l.step === (m.steps?.length || 1) - 1).map((l) => l.date))].sort();
+  if (m.lastAt && !ends.includes(m.lastAt)) ends.push(m.lastAt), ends.sort();
+  const gaps = ends.slice(1).map((d, i) => diffDays(ends[i], d)).filter((g) => g > 0);
+  if (gaps.length < 2) return { days: m.everyDays || 7, learned: false };
+  const recent = gaps.slice(-6);
+  return { days: Math.max(1, Math.round(recent.reduce((a, b) => a + b, 0) / recent.length)), learned: true };
+}
+export function choreLast(s: State, m: Mission): string | null {
+  let d = m.lastAt || null;
+  for (const l of s.logs) if (l.missionId === m.id && l.done && l.step === (m.steps?.length || 1) - 1 && (!d || l.date > d)) d = l.date;
+  return d;
+}
+/** Date the chore is next needed, or null if it has never been done or dated. */
+export function choreDue(s: State, m: Mission): string | null {
+  const last = choreLast(s, m);
+  return last ? addDays(last, choreInterval(s, m).days) : null;
+}
+
+/** Parts of the day (0 morning .. 3 evening), best first, once a pattern is confident. */
+export function bestParts(s: State, energy: string): number[] | null {
+  const rows = contextStats(s).filter((c) => c.energy === energy && c.n >= 8);
+  if (rows.length < 2) return null;
+  const sorted = [...rows].sort((a, b) => b.rate - a.rate);
+  if (sorted[0].rate - sorted[sorted.length - 1].rate < 0.2) return null;
+  return sorted.map((r) => PARTS.indexOf(r.part));
+}
+
+/** What a mission start came straight after (within 90 min): a mission's energy, an event, or a "doing now" tap. */
+export function cameAfter(s: State, ts: number, skipId?: string): string | null {
+  const byId = new Map(s.missions.map((m) => [m.id, m]));
+  let best: { at: number; what: string } | null = null;
+  const consider = (at: number, what: string) => { if (at <= ts && at > ts - 90 * 60000 && (!best || at > best.at)) best = { at, what }; };
+  for (const l of s.logs) if (l.id !== skipId && l.end > 0) { const m = byId.get(l.missionId); if (m && m.energy !== 'none' && m.kind !== 'chore') consider(l.end, isExercise(m) ? 'workout' : m.energy); }
+  for (const d of s.doing) consider(d.ts, d.what.toLowerCase());
+  const date = dateOf(ts);
+  for (const e of s.events) {
+    if (e.date !== date) continue;
+    const base = parseD(date).getTime() - 12 * 3600000;
+    consider(base + (e.end + e.travel) * 60000, e.kind === 'event' || e.kind === 'exam' ? 'event' : e.kind);
+  }
+  return best ? (best as { what: string }).what : null;
+}
+
+/**
+ * How what came before affects each kind of work. Only reports a pattern with enough
+ * cases and a clear gap from that kind of work's usual finish rate.
+ */
+export function afterStats(s: State) {
+  const en = new Map(s.missions.map((m) => [m.id, m]));
+  const cells: Record<string, { n: number; done: number }> = {}, base: Record<string, { n: number; done: number }> = {};
+  for (const l of s.logs) {
+    const m = en.get(l.missionId);
+    if (!m || m.kind === 'habit' || m.kind === 'chore' || l.end <= 0) continue;
+    const b = (base[m.energy] ||= { n: 0, done: 0 }); b.n++; if (l.done) b.done++;
+    const prev = cameAfter(s, l.start, l.id);
+    if (!prev) continue;
+    const c = (cells[`${prev}|${m.energy}`] ||= { n: 0, done: 0 }); c.n++; if (l.done) c.done++;
+  }
+  return Object.entries(cells).flatMap(([k, c]) => {
+    const [after, energy] = k.split('|');
+    const b = base[energy];
+    if (c.n < 6 || !b || b.n < 10) return [];
+    const rate = c.done / c.n, usual = b.done / b.n;
+    return Math.abs(rate - usual) >= 0.25 ? [{ after, energy, n: c.n, rate, usual, worse: rate < usual }] : [];
+  });
 }
 
 export function bodyFat(neck: number, navel: number, height: number) {

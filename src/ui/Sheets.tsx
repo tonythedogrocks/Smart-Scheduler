@@ -5,6 +5,7 @@ import { eventsOn } from '../model/schedule';
 import type { Mission, Level } from '../model/types';
 import { fromHM, toHM } from './bits';
 
+const WDAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const close = () => setLocal({ sheet: null, sheetArg: undefined });
 const val = (e: Event) => (e.target as HTMLInputElement).value;
 
@@ -53,7 +54,8 @@ function Add() {
   const [end, setEnd] = useState('12:00');
   const [travel, setTravel] = useState(20);
   const [title, setTitle] = useState('');
-  const [weekly, setWeekly] = useState(false);
+  const [repeat, setRepeat] = useState<'once' | 'weekly' | 'some'>('once');
+  const [weeks, setWeeks] = useState<number[]>([]);
   const [skill, setSkill] = useState(arg.split(':')[1] || S().skills[0]?.id || '');
   const [target, setTarget] = useState('');
   const [due, setDue] = useState('');
@@ -77,7 +79,7 @@ function Add() {
     }
     if (en <= st) return;
     const t = kind === 'shift' ? cfg.shift.title : kind === 'workout' ? cfg.workoutTitle : title.trim() || 'Event';
-    actions.addEvent({ title: t, kind, start: st, end: en, travel: tr, ...(kind === 'event' && weekly ? { weekday: weekday(date) } : { date }) });
+    actions.addEvent({ title: t, kind, start: st, end: en, travel: tr, ...(kind === 'event' && repeat !== 'once' ? { weekday: weekday(date), ...(repeat === 'some' && weeks.length ? { nth: [...weeks].sort() } : {}) } : { date }) });
     toast(`${t} added`);
     close();
   };
@@ -110,7 +112,20 @@ function Add() {
           {kind === 'shift'
             ? <span class="soft" style="font-size:14px">{cfg.shift.travel ? `${cfg.shift.travel} min travel each way is added automatically. ` : ''}Ends {fmtT(en)}.</span>
             : <label class="field" style="max-width:200px">Travel each way (min)<input inputMode="numeric" value={String(travel)} onInput={(e) => setTravel(Math.max(0, +val(e) || 0))} /></label>}
-          {kind === 'event' && <label class="check"><input type="checkbox" checked={weekly} onChange={(e) => setWeekly((e.target as HTMLInputElement).checked)} />Repeats every week on this weekday</label>}
+          {kind === 'event' && (
+            <>
+              <div class="row">
+                <span style="font-size:14px">Repeats:</span>
+                {([['once', 'Just once'], ['weekly', `Every ${WDAY[weekday(date)]}`], ['some', `Some ${WDAY[weekday(date)]}s`]] as const).map(([k, l]) => <button type="button" class={`small ${repeat === k ? 'on' : ''}`} onClick={() => setRepeat(k)}>{l}</button>)}
+              </div>
+              {repeat === 'some' && (
+                <div class="row">
+                  <span style="font-size:14px">Which ones each month:</span>
+                  {[1, 2, 3, 4, 5].map((n) => <button type="button" class={`small ${weeks.includes(n) ? 'on' : ''}`} onClick={() => setWeeks(weeks.includes(n) ? weeks.filter((x) => x !== n) : [...weeks, n])}>{['1st', '2nd', '3rd', '4th', 'Last'][n - 1]}</button>)}
+                </div>
+              )}
+            </>
+          )}
           {[...new Set(warn)].map((w) => <div class="warn" role="alert">{w}</div>)}
         </>
       )}
@@ -139,15 +154,22 @@ function MissionEdit() {
       {isNew && (
         <div class="row">{(['work', 'practice', 'habit'] as const).map((k) => <button type="button" class={`small ${m.kind === k ? 'on' : ''}`} onClick={() => up({ kind: k, minLevel: k === 'habit' ? 2 : 3 })}>{k === 'work' ? 'Has an end' : k === 'practice' ? 'Ongoing practice' : 'Daily habit'}</button>)}</div>
       )}
-      <div class="row">
+      {m.kind === 'chore' && (
+        <div class="row">
+          <label class="field">Usually every (days)<input inputMode="numeric" value={String(m.everyDays ?? 7)} onInput={(e) => up({ everyDays: num(e) || 1 })} /></label>
+          <label class="field">Last done<input type="date" value={m.lastAt || ''} onInput={(e) => up({ lastAt: val(e) || undefined })} /></label>
+        </div>
+      )}
+      {m.kind === 'chore' && <span class="soft" style="font-size:14px">After a few runs the app learns the real gap and uses that instead.</span>}
+      {m.kind !== 'chore' && <div class="row">
         <label class="field">{m.kind === 'work' ? 'Minutes per block' : 'Minutes'}<input inputMode="numeric" value={String(m.minutes)} onInput={(e) => up({ minutes: num(e) || 5 })} /></label>
         {m.kind === 'work' && <label class="field">Blocks left<input inputMode="numeric" value={String(m.unitsLeft ?? 0)} onInput={(e) => up({ unitsLeft: num(e) })} /></label>}
         {m.kind === 'practice' && <label class="field">Most per day (min)<input inputMode="numeric" value={String(m.dailyCapMin ?? '')} onInput={(e) => up({ dailyCapMin: num(e) })} /></label>}
-      </div>
-      <div class="row">
+      </div>}
+      {m.kind !== 'chore' && <div class="row">
         <label class="field">Kind of energy<select value={m.energy} onChange={(e) => up({ energy: val(e) as Mission['energy'], workout: val(e) === 'physical' ? m.workout : false })}><option value="mental">Mental</option><option value="physical">Physical</option><option value="social">Social</option><option value="none">Light</option></select></label>
         <label class="field">Runs from level<select value={String(m.minLevel)} onChange={(e) => up({ minLevel: +val(e) as Level })}>{[1, 2, 3, 4, 5].map((n) => <option value={n}>{n} and up</option>)}</select></label>
-      </div>
+      </div>}
       {m.energy === 'physical' && <label class="check"><input type="checkbox" checked={!!m.workout} onChange={(e) => up({ workout: (e.target as HTMLInputElement).checked })} />A real workout (waits after meals, eases when flares spike)</label>}
       {S().settings.restDay !== null && <label class="check"><input type="checkbox" checked={!!m.restOk} onChange={(e) => up({ restOk: (e.target as HTMLInputElement).checked })} />Counts as a {S().settings.restDayName} essential</label>}
       <button type="button" class="big go sm" onClick={save}>SAVE</button>

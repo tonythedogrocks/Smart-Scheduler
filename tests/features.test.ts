@@ -141,7 +141,7 @@ describe('far-off deadlines', () => {
   it('paces toward a deadline beyond the planning window without flagging it', () => {
     const s = sample(); s.days['2026-11-12'] = { level: 3 };
     for (const o of s.objectives) delete o.due; // no near deadlines competing in this case
-    s.objectives.find((o) => o.id === 'lang')!.due = '2028-06-01';
+    s.objectives.find((o) => o.id === 'lang')!.due = '2029-03-15';
     s.missions.push({ id: 'lang-course', objectiveId: 'lang', title: 'Course', kind: 'work', energy: 'mental', minutes: 30, minLevel: 3, unitsLeft: 300, unitsTotal: 300, maxBlockUnits: 2, dailyCapMin: 60 });
     const fc = forecast(s, at('2026-11-12T08:00'));
     expect(fc.risks.some((r) => r.objectiveId === 'lang')).toBe(false);

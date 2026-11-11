@@ -136,3 +136,16 @@ describe('concrete missions', () => {
     void d16;
   });
 });
+
+describe('far-off deadlines', () => {
+  it('paces toward a deadline beyond the planning window without flagging it', () => {
+    const s = sample(); s.days['2026-11-12'] = { level: 3 };
+    for (const o of s.objectives) delete o.due; // no near deadlines competing in this case
+    s.objectives.find((o) => o.id === 'lang')!.due = '2028-06-01';
+    s.missions.push({ id: 'lang-course', objectiveId: 'lang', title: 'Course', kind: 'work', energy: 'mental', minutes: 30, minLevel: 3, unitsLeft: 300, unitsTotal: 300, maxBlockUnits: 2, dailyCapMin: 60 });
+    const fc = forecast(s, at('2026-11-12T08:00'));
+    expect(fc.risks.some((r) => r.objectiveId === 'lang')).toBe(false);
+    const weekly = fc.days.slice(0, 7).reduce((a, d) => a + d.blocks.filter((b) => b.missionId === 'lang-course').reduce((x, b) => x + b.min, 0), 0);
+    expect(weekly).toBeGreaterThan(0);
+  });
+});

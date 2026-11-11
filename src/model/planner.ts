@@ -262,7 +262,8 @@ export function forecast(s: State, now: number): Forecast {
     if (!hasWork) continue;
     const d = landOf(o);
     landing[o.id] = d === null ? null : addDays(today, Math.max(0, d));
-    if (o.due && (d === null || d > diffDays(today, o.due))) risks.push({ objectiveId: o.id, title: o.title, due: o.due, lands: landing[o.id], note: o.riskNote });
+    // a deadline beyond the planning window can't be judged yet: pace toward it quietly
+    if (o.due && (d === null ? diffDays(today, o.due) <= H : d > diffDays(today, o.due))) risks.push({ objectiveId: o.id, title: o.title, due: o.due, lands: landing[o.id], note: o.riskNote });
   }
   const v = { today, days, landing, risks, eased };
   memo = { k, v };

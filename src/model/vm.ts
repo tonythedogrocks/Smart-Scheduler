@@ -1,6 +1,6 @@
 import type { State, Mission } from './types';
 import { addDays, dateOf, diffDays, fmtDate, fmtDay, fmtDur, fmtT, minsOf, weekStart, weekday } from './time';
-import { forecast, layoutDay, orders, habitMin, habitTitle, habitsDue, type Forecast, type PlanItem } from './planner';
+import { describeUnits, forecast, layoutDay, nextLabels, orders, habitMin, habitTitle, habitsDue, type Forecast, type PlanItem } from './planner';
 import { levelName, nice } from './seed';
 import { bodyFat, choreDue, choreInterval, choreLast, exerciseCeiling, factor, partOf } from './learn';
 import { eventsOn, isRest } from './schedule';
@@ -94,9 +94,13 @@ function missionPanel(s: State, m: Mission, level: number): PanelVM {
     return { key: `mi:${m.id}`, h: 'MISSION', t: m.title, m: bits.join(' · '), d: m.note, missionId: m.id, units: 1, baseMin: base, min: Math.round(base * f), act: 'mission', editable: true };
   }
   if (m.kind === 'work') {
-    const left = m.unitsLeft || 0, u = Math.min(m.maxBlockUnits || 3, Math.max(1, left));
+    const left = m.unitsLeft || 0;
+    let u = Math.min(m.maxBlockUnits || 3, Math.max(1, left));
+    if (m.labels?.length) { const at0 = m.labels.length - left; while (u < left && m.labels[at0 + u] === m.labels[at0 + u - 1]) u++; }
     const done = left <= 0;
-    return { key: `mi:${m.id}`, h: 'MISSION', t: m.title, m: done ? 'Complete' : `${left} ${left === 1 ? 'block' : 'blocks'} left · about ${fmtDur(left * m.minutes * f)}`, d: m.note, done, missionId: done ? undefined : m.id, units: u, baseMin: u * m.minutes, min: Math.round(u * m.minutes * f), act: done ? 'info' : 'mission', editable: true };
+    const next = done ? '' : describeUnits(nextLabels(m, u));
+    const summary = done ? 'Complete' : m.labels?.length ? `About ${fmtDur(left * m.minutes * f)} left` : `${left} ${left === 1 ? 'block' : 'blocks'} left · about ${fmtDur(left * m.minutes * f)}`;
+    return { key: `mi:${m.id}`, h: 'MISSION', t: m.title, m: next ? `Next: ${next} · ${summary.toLowerCase()}` : summary, d: m.note, done, missionId: done ? undefined : m.id, units: u, baseMin: u * m.minutes, min: Math.round(u * m.minutes * f), act: done ? 'info' : 'mission', editable: true };
   }
   return { key: `mi:${m.id}`, h: 'MISSION', t: m.title, m: `${Math.round(m.minutes * f)} min blocks${m.dailyCapMin ? ` · up to ${fmtDur(m.dailyCapMin)} a day` : ''}`, d: m.note, missionId: m.id, units: 1, baseMin: m.minutes, min: Math.round(m.minutes * f), act: 'mission', editable: true };
 }

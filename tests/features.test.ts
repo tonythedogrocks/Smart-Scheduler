@@ -112,3 +112,27 @@ describe('learned timing', () => {
     expect(got?.worse).toBe(true);
   });
 });
+
+describe('concrete missions', () => {
+  it('describes named units', async () => {
+    const { describeUnits } = await import('../src/model/planner');
+    expect(describeUnits(['Ch 1|lesson 1', 'Ch 1|lesson 2', 'Ch 1|lesson 3'])).toBe('Ch 1: lessons 1–3');
+    expect(describeUnits(['Ch 1|lesson 7', 'Ch 1|chapter quiz', 'Ch 1|chapter quiz', 'Ch 2|chapter quiz'])).toBe('Ch 1: lesson 7 + chapter quiz · Ch 2: chapter quiz');
+    expect(describeUnits(['Final review'])).toBe('Final review');
+  });
+  it('plans named blocks in order, keeps a two-unit item whole, and respects start dates', () => {
+    const s = sample(); s.days['2026-11-12'] = { level: 4 };
+    const m = s.missions.find((x) => x.id === 'exam-steps')!;
+    m.unitsLeft = 6; m.unitsTotal = 6; m.minutes = 10; m.maxBlockUnits = 3;
+    m.labels = ['Ch 1|lesson 1', 'Ch 1|lesson 2', 'Ch 1|chapter quiz', 'Ch 1|chapter quiz', 'Ch 2|lesson 1', 'Ch 2|lesson 2'];
+    s.missions.push({ id: 'review', objectiveId: 'exam', title: 'Light review', kind: 'work', energy: 'mental', minutes: 30, minLevel: 2, unitsLeft: 1, unitsTotal: 1, notBefore: '2026-11-16' });
+    const now = at('2026-11-12T08:00');
+    const fc = forecast(s, now);
+    const subs = layoutDay(s, fc, '2026-11-12', now).filter((i) => i.missionId === 'exam-steps').map((i) => i.sub);
+    expect(subs[0]).toMatch(/^Ch 1: lessons 1–2 \+ chapter quiz/);
+    expect(fc.days[0].blocks.some((b) => b.missionId === 'review')).toBe(false);
+    const d16 = fc.days.find((d) => d.date === '2026-11-16')!;
+    expect(fc.days.slice(0, 4).some((d) => d.blocks.some((b) => b.missionId === 'review'))).toBe(false);
+    void d16;
+  });
+});

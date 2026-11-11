@@ -16,6 +16,36 @@ export interface PlanItem {
   block?: Block;
 }
 
+/**
+ * Describe a run of units from their labels: "Chapter 2: lessons 3–5 + chapter quiz",
+ * joining groups with " · ". Repeated labels (an item spread over units) show once.
+ */
+export function describeUnits(labels: string[]): string {
+  const groups: { g: string; items: string[] }[] = [];
+  let prev = '';
+  for (const l of labels) {
+    if (l === prev) continue;
+    prev = l;
+    const [g, item = ''] = l.split('|');
+    const last = groups[groups.length - 1];
+    if (last && last.g === g) last.items.push(item); else groups.push({ g, items: item ? [item] : [] });
+  }
+  return groups.map(({ g, items }) => {
+    const nums = items.map((i) => /^lesson (\d+)$/.exec(i)).filter(Boolean).map((x) => +x![1]);
+    const other = items.filter((i) => !/^lesson \d+$/.test(i));
+    const parts: string[] = [];
+    if (nums.length) parts.push(nums.length === 1 ? `lesson ${nums[0]}` : `lessons ${nums[0]}–${nums[nums.length - 1]}`);
+    parts.push(...other);
+    return parts.length ? `${g}: ${parts.join(' + ')}` : g;
+  }).join(' · ');
+}
+/** The labels for the next `units` units of a work mission. */
+export function nextLabels(m: Mission, units: number, skip = 0): string[] {
+  if (!m.labels?.length) return [];
+  const at = m.labels.length - (m.unitsLeft ?? 0) + skip;
+  return m.labels.slice(Math.max(0, at), Math.max(0, at) + units);
+}
+
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
 const round5 = (x: number) => Math.ceil(x / 5) * 5;
 
@@ -79,7 +109,8 @@ export function forecast(s: State, now: number): Forecast {
   const wk = (id: string, date: string) => `${id}|${weekStart(date)}`;
   for (const l of s.logs) if (l.date >= weekStart(today)) weekMin.set(wk(l.missionId, l.date), (weekMin.get(wk(l.missionId, l.date)) || 0) + (l.end - l.start) / 60000);
 
-  const available = (m: Mission, t: number) => (m.after || []).every((a) => {
+  const available = (m: Mission, t: number) => (!m.notBefore || addDays(today, t) >= m.notBefore)
+    && (m.afterNoWait || []).every((a) => !byId.get(a) || (doneIdx.get(a) !== undefined && doneIdx.get(a)! <= t)) && (m.after || []).every((a) => {
     const pre = byId.get(a);
     if (!pre) return true;
     const d = doneIdx.get(a);
@@ -153,6 +184,8 @@ export function forecast(s: State, now: number): Forecast {
           const unit = m.minutes * ff;
           u = Math.min(m.maxBlockUnits || 3, left, Math.max(1, Math.floor((cap + unit * 0.4) / unit)));
           if (m.dailyCapMin) u = Math.min(u, Math.floor((m.dailyCapMin - spent) / unit));
+          // don't stop halfway through an item that spans units (a chapter quiz, say)
+          if (m.labels?.length && u >= 1) { const at0 = m.labels.length - left; while (u < left && m.labels[at0 + u] === m.labels[at0 + u - 1]) u++; }
           if (u < 1 || unit * 0.6 > cap) continue;
           min = Math.round(u * unit);
           const dueIn = o?.due ? Math.max(1, diffDays(date, o.due)) : 0;
@@ -234,9 +267,12 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   const occ = new Map<string, number>();
   const keyFor = (id: string) => { const n = occ.get(id) || 0; occ.set(id, n + 1); return `m:${id}:${n}`; };
   const level = s.days[date]?.level ?? fc.days.find((d) => d.date === date)?.level ?? 3;
-  const label = (m: Mission, min: number, units: number) => {
+  const usedUnits = new Map<string, number>();
+  const label = (m: Mission, min: number, units: number, skip = 0) => {
     const bits: string[] = [];
-    if (m.kind === 'work' && m.unitName && m.unitsTotal) {
+    const named = m.kind === 'work' ? nextLabels(m, units, skip) : [];
+    if (named.length) bits.push(describeUnits(named));
+    else if (m.kind === 'work' && m.unitName && m.unitsTotal) {
       const at = m.unitsTotal - (m.unitsLeft || 0) + 1;
       bits.push(units > 1 ? `${m.unitName}s ${at} to ${Math.min(m.unitsTotal, at + units - 1)} of ${m.unitsTotal}` : `${m.unitName} ${Math.min(at, m.unitsTotal)} of ${m.unitsTotal}`);
     }
@@ -284,6 +320,8 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
       items.push({ key: run.step !== undefined ? `c:${m.id}:${run.step}` : keyFor(m.id), start: st, end, title, sub: label(m, min, run.units), detail: m.note, kind: 'mission', missionId: m.id, units: run.units, baseMin: run.plannedMin, min, step: run.step, running: true });
     }
   }
+
+  if (run) usedUnits.set(run.missionId, run.units);
 
   // Chores with steps: every step needs you home, the time between steps is free.
   for (const m of s.missions) {
@@ -346,7 +384,9 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
       // breathing room after a real block
       slots = slots.map(([x, y]) => (x === at + a.min ? [x + s.settings.breakMin, y] : [x, y]) as [number, number]).filter(([x, y]) => y - x >= 5);
     }
-    items.push({ key: keyFor(m.id), start: at, end: at + a.min, title: a.habit ? habitTitle(m, level) : m.title, sub: label(m, a.min, a.units), detail: m.note, kind: 'mission', missionId: m.id, units: a.units, baseMin: a.baseMin, min: a.min });
+    const skip = usedUnits.get(m.id) || 0;
+    usedUnits.set(m.id, skip + a.units);
+    items.push({ key: keyFor(m.id), start: at, end: at + a.min, title: a.habit ? habitTitle(m, level) : m.title, sub: label(m, a.min, a.units, skip), detail: m.note, kind: 'mission', missionId: m.id, units: a.units, baseMin: a.baseMin, min: a.min });
   }
   items.sort((a, b) => a.start - b.start || a.end - b.end);
   const cur = items.find((i) => i.running) || items.find((i) => !i.done && !i.past && i.block?.kind !== 'note' && i.start <= nowMin + 5 && i.end > nowMin);

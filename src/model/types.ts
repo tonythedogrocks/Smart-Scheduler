@@ -24,6 +24,9 @@ export interface Mission {
   minLevel: Level;
   everyDays?: number;      // habit cadence
   unitsLeft?: number; unitsTotal?: number; unitName?: string;
+  labels?: string[];       // work: what each unit is, in order, as "Group|item" (e.g. "Chapter 2|lesson 3")
+  afterNoWait?: string[];  // unlocks when these are done, without waiting out their clocks
+  notBefore?: string;      // not planned before this date
   maxBlockUnits?: number;
   dailyCapMin?: number;
   weeklyMin?: number;

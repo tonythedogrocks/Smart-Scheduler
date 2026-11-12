@@ -605,3 +605,20 @@ describe('editing a task re-plans today', () => {
     expect(planSig(s, '2026-11-12')).not.toBe(a);
   });
 });
+
+describe('late meals', () => {
+  it('lunch not eaten by 5 past moves to the next free stretch, and the rest of the plan stays', async () => {
+    const { actions, S, adopt } = await import('../src/model/store');
+    const { setNowOverride } = await import('../src/model/time');
+    const { fixedBlocks } = await import('../src/model/schedule');
+    const s = sample();
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00'), lunchMin: 60 };
+    s.days['2026-11-12'].plan = { sig: planSig(s, '2026-11-12'), items: [{ key: 'k', missionId: 'course-lessons', start: 840, end: 870, title: 'X', units: 1, baseMin: 30, min: 30 }] };
+    adopt(s);
+    setNowOverride('2026-11-12T13:12:00'); actions.mealLate('lunch'); setNowOverride(null);
+    const st = S(), lunch = fixedBlocks(st, '2026-11-12').find((b) => b.meal === 'lunch')!;
+    expect(lunch.start).toBeGreaterThanOrEqual(795);
+    expect(lunch.start >= 870 || lunch.end <= 840).toBe(true);
+    expect(st.days['2026-11-12'].plan!.sig).toBe(planSig(st, '2026-11-12'));
+  });
+});

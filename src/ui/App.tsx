@@ -80,6 +80,10 @@ export function App() {
     const t = new Date(nowTs()), nm = t.getHours() * 60 + t.getMinutes();
     const late = lib.todayItems.find((i) => i.kind === 'mission' && !i.done && !i.running && i.missionId && i.start + GRACE <= nm);
     if (late) actions.recordMiss(late.missionId!, late.start);
+    else {
+      const meal = lib.todayItems.find((i) => i.kind === 'fixed' && i.block?.kind === 'meal' && !i.block.ate && i.block.meal && i.start + GRACE <= nm);
+      if (meal) actions.mealLate(meal.block!.meal!);
+    }
   });
   useEffect(() => { if (l.toast) { const t = setTimeout(() => setLocal({ toast: undefined }), 2600); return () => clearTimeout(t); } }, [l.toast?.id]);
 

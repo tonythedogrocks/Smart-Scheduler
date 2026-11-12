@@ -2,7 +2,7 @@ import { get, set } from 'idb-keyval';
 import type { State, Level, Evt, Mission, Objective, Log, PlanSnap } from './types';
 import { seed, withDefaults } from './seed';
 import { dateOf, nowTs, uid } from './time';
-import { describeUnits, excusedHabits, habitsDue, nextGap, nextLabels, GRACE } from './planner';
+import { describeUnits, excusedHabits, habitsDue, nextGap, nextLabels, planSig, GRACE } from './planner';
 import { factor } from './learn';
 import { unlock } from './game';
 import { stamp } from './merge';
@@ -195,6 +195,24 @@ export const actions = {
     mutate((s) => { const d = (s.days[today()] ||= {}); d.plan = { sig, items }; });
   },
   /** A planned block passed without being started: log it as missed (feeds the energy model), then the day re-plans. */
+  /** A meal not eaten 5 minutes past its time moves to the next free stretch, without reshuffling the rest of the day. */
+  mealLate(meal: 'lunch' | 'dinner') {
+    mutate((s) => {
+      const date = today(), d = (s.days[date] ||= {});
+      if (d.ate?.[meal] || (meal === 'dinner' && d.cook)) return; // dinner after cooking follows the cooking
+      const t = new Date(nowTs()), nm = Math.ceil((t.getHours() * 60 + t.getMinutes()) / 5) * 5;
+      const len = meal === 'lunch' ? d.lunchMin ?? s.settings.lunchMin : d.dinnerMin ?? s.settings.dinnerMin;
+      const hi = meal === 'lunch' ? 870 : 1230;
+      // look for room as if the meal weren't on the clock yet
+      const tmp = structuredClone(s), td = tmp.days[date];
+      if (meal === 'lunch') { td.lunchAt = nm; td.lunchMin = 0; } else { td.dinnerAt = nm; td.dinnerMin = 0; }
+      const at = nextGap(tmp, date, nm, len) ?? nm;
+      if (at > hi) return; // past the usual window: leave it
+      const kept = d.plan && d.plan.sig === planSig(s, date);
+      if (meal === 'lunch') d.lunchAt = at; else d.dinnerAt = at;
+      if (kept) d.plan!.sig = planSig(s, date);
+    });
+  },
   recordMiss(missionId: string, at: number) {
     const d0 = S().days[today()];
     if ((d0?.misses || []).some((x) => x.m === missionId && x.at === at)) return; // each planned time counts once

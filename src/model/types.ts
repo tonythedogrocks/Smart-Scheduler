@@ -76,7 +76,8 @@ export interface Log {
 }
 
 export interface DayRec { t?: number; level?: Level; setAt?: number; floorAwarded?: boolean; lunchAt?: number; dinnerAt?: number; starts?: Record<string, number>; cook?: boolean | 'family'; cookStart?: number; cookEnd?: number; morningEnd?: number; dinnerTap?: number;
-  ate?: Partial<Record<'lunch' | 'dinner', { at: number; big?: boolean }>>; // confirmed meals: start (minutes from midnight), and whether it was a large one
+  ate?: Partial<Record<'lunch' | 'dinner', { at: number; big?: boolean }>>;
+  misses?: { m: string; at: number }[]; // planned blocks that passed without being started (start time, minutes) // confirmed meals: start (minutes from midnight), and whether it was a large one
 }
 
 export interface Settings {
@@ -102,6 +103,9 @@ export interface Settings {
   north: { kicker: string; title: string; sub: string; date: string; toWhat: string };
 }
 
+/** A day from the earlier app: time blocks with an energy signal (1 = finished on pace, 0.2 = missed). */
+export interface PriorDay { id: string; t?: number; date: string; level?: number; blocks: { s: number; e: number; v: number }[] }
+
 export interface AchDef { id: string; t?: number; title: string; sub: string; objectiveId?: string; missionId?: string; count?: number; manual?: boolean }
 
 export interface Running { missionId: string; units: number; plannedMin: number; startedAt: number; step?: number; ticked?: number }
@@ -109,6 +113,7 @@ export interface Running { missionId: string; units: number; plannedMin: number;
 export interface State {
   v: 1;
   settings: Settings;
+  prior?: PriorDay[];      // history imported from the earlier app, for the energy model
   skills: Skill[]; achDefs: AchDef[]; objectives: Objective[]; missions: Mission[]; events: Evt[];
   logs: Log[]; days: Record<string, DayRec>;
   flares: { id: string; ts: number; rating?: number; t?: number }[];

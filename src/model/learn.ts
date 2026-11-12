@@ -252,56 +252,6 @@ export function choreDue(s: State, m: Mission): string | null {
   return last ? addDays(last, choreInterval(s, m).days) : null;
 }
 
-/**
- * Real progress per hour for every started block of goal work, relative to that mission's usual:
- * 1 = typical, above 1 = more of the plan moved forward per minute spent. A block stopped early
- * only counts what was actually finished, so this folds finish rate and speed into one number.
- */
-function progressRuns(s: State) {
-  const byId = new Map(s.missions.map((m) => [m.id, m]));
-  const raw: { id: string; energy: string; part: number; level: number; rate: number }[] = [];
-  for (const l of s.logs) {
-    const m = byId.get(l.missionId);
-    if (!m || m.kind === 'habit' || m.kind === 'chore' || m.errand || l.end <= l.start || l.plannedMin <= 0) continue;
-    const actual = Math.max(1, (l.end - l.start) / 60000);
-    const credited = m.kind === 'work' ? l.units * m.minutes : l.done ? l.plannedMin : Math.min(actual, l.plannedMin) * 0.5;
-    raw.push({ id: m.id, energy: m.energy, part: partOf(minsOf(l.start)), level: l.level ?? s.days[l.date]?.level ?? 3, rate: clamp(credited / actual, 0, 3) });
-  }
-  // compare each block with its own mission's usual pace, so a badly estimated mission doesn't skew a time slot
-  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
-  const byMission = new Map<string, number[]>(), byEnergy = new Map<string, number[]>();
-  for (const r of raw) { (byMission.get(r.id) || byMission.set(r.id, []).get(r.id)!).push(r.rate); (byEnergy.get(r.energy) || byEnergy.set(r.energy, []).get(r.energy)!).push(r.rate); }
-  return raw.map((r) => {
-    const own = byMission.get(r.id)!, base = own.length >= 4 ? mean(own) : mean(byEnergy.get(r.energy)!);
-    return { ...r, rel: base > 0 ? clamp(r.rate / base, 0, 3) : 1 };
-  });
-}
-
-/**
- * Score of each part of the day (0 morning .. 3 evening) for a kind of work at an energy level.
- * Thin data leans on the broader pattern: level-specific slots lean on that slot across all levels,
- * which leans on "typical" (1). So it adapts early without overreacting to one bad day.
- */
-export function slotScores(s: State, energy: string, level?: number) {
-  const runs = progressRuns(s).filter((r) => r.energy === energy);
-  const K = 4;
-  return [0, 1, 2, 3].map((part) => {
-    const all = runs.filter((r) => r.part === part);
-    const broad = (all.reduce((a, r) => a + r.rel, 0) + K * 1) / (all.length + K);
-    if (level === undefined) return { part, n: all.length, score: broad };
-    const lv = all.filter((r) => Math.round(r.level) === Math.round(level));
-    return { part, n: all.length, score: (lv.reduce((a, r) => a + r.rel, 0) + K * broad) / (lv.length + K) };
-  });
-}
-
-/** Parts of the day, best first, for this kind of work at this level; null until there's a real difference. */
-export function bestParts(s: State, energy: string, level?: number): number[] | null {
-  const sc = slotScores(s, energy, level);
-  if (sc.reduce((a, x) => a + x.n, 0) < 8) return null;
-  const tried = sc.filter((x) => x.n >= 2).sort((a, b) => b.score - a.score);
-  if (tried.length < 2 || tried[0].score - tried[tried.length - 1].score < 0.15) return null;
-  return tried.map((x) => x.part);
-}
 
 
 /** What a mission start came straight after (within 90 min): a mission's energy, an event, or a "doing now" tap. */

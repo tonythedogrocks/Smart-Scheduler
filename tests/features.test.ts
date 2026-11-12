@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { sample } from './fixture';
 import { forecast, layoutDay } from '../src/model/planner';
 import { eventsOn, inWeeks } from '../src/model/schedule';
-import { afterStats, bestParts, choreDue, choreInterval, exerciseCeiling } from '../src/model/learn';
+import { afterStats, choreDue, choreInterval, exerciseCeiling } from '../src/model/learn';
 import { addDays } from '../src/model/time';
 import type { Log, State } from '../src/model/types';
 
@@ -86,21 +86,6 @@ describe('chores with steps', () => {
 });
 
 describe('learned timing', () => {
-  it('prefers the better part of the day only once a pattern is clear', () => {
-    const s = sample();
-    expect(bestParts(s, 'mental')).toBeNull();
-    for (let i = 0; i < 10; i++) {
-      const d = addDays('2026-10-01', i);
-      s.logs.push(log('course-lessons', d, '09:00', 30, i < 9));
-      s.logs.push(log('course-lessons', d, '15:00', 30, i < 4));
-    }
-    expect(bestParts(s, 'mental')![0]).toBe(0);
-    expect(bestParts(s, 'mental', 3)![0]).toBe(0);
-    s.days['2026-11-12'] = { level: 3 }; s.updatedAt = Math.random();
-    const now = at('2026-11-12T08:00');
-    const first = layoutDay(s, forecast(s, now), '2026-11-12', now).find((i) => i.kind === 'mission' && s.missions.find((m) => m.id === i.missionId)?.energy === 'mental' && s.missions.find((m) => m.id === i.missionId)?.kind !== 'habit');
-    expect(first!.start).toBeLessThan(660);
-  });
   it('spots what tends to come before unfinished work', () => {
     const s = sample();
     for (let i = 0; i < 12; i++) {
@@ -263,6 +248,7 @@ describe('V1 features', () => {
   });
   it('an errand lands inside its window on a good day only', () => {
     const s = sample();
+    for (const o of s.objectives) delete o.due; // no deadlines: not a lock-in day
     s.missions.push({ id: 'err', objectiveId: '', title: 'Errand', kind: 'work', energy: 'none', minutes: 15, minLevel: 3, unitsLeft: 1, unitsTotal: 1, maxBlockUnits: 1, errand: true, travel: 10, window: [600, 1020] });
     s.days['2026-11-12'] = { level: 2 };
     let fc = forecast(s, at('2026-11-12T08:00'));
@@ -324,35 +310,6 @@ describe('workout rotation', () => {
   });
 });
 
-describe('time slots by real progress', () => {
-  it('prefers the slot with more progress per hour, not just more finishes', async () => {
-    const { bestParts, slotScores } = await import('../src/model/learn');
-    const s = sample();
-    for (let i = 0; i < 6; i++) {
-      const d = addDays('2026-10-01', i);
-      s.logs.push(log('course-lessons', d, '09:00', 60));  // finishes, but takes twice the estimate
-      s.logs.push(log('course-lessons', d, '15:00', 20));  // finishes fast
-    }
-    expect(bestParts(s, 'mental')![0]).toBe(2);
-    const sc = slotScores(s, 'mental');
-    expect(sc[2].score).toBeGreaterThan(sc[0].score);
-  });
-  it('can differ by energy level, leaning on the overall pattern when a level has little data', async () => {
-    const { slotScores } = await import('../src/model/learn');
-    const s = sample();
-    for (let i = 0; i < 8; i++) {
-      const d = addDays('2026-10-01', i);
-      s.logs.push(log('course-lessons', d, '09:00', 20, true, { level: 4 }));
-      s.logs.push(log('course-lessons', d, '15:00', 60, true, { level: 4 }));
-    }
-    s.logs.push(log('course-lessons', '2026-10-20', '09:00', 90, true, { level: 2 })); // one bad Standby morning
-    const at4 = slotScores(s, 'mental', 4), at2 = slotScores(s, 'mental', 2);
-    expect(at4[0].score).toBeGreaterThan(at4[2].score);
-    expect(at2[0].score).toBeLessThan(at4[0].score);   // the bad Standby morning shows up...
-    expect(at2[0].score).toBeGreaterThan(at2[2].score); // ...but one day doesn't flip the pattern
-  });
-});
-
 describe('confirmed meals', () => {
   it('a confirmed lunch sits where it happened and workouts wait from then (longer after a large meal)', async () => {
     const { fixedBlocks } = await import('../src/model/schedule');
@@ -383,5 +340,86 @@ describe('gaps get used', () => {
     expect(big).toBeTruthy();
     expect(work.length).toBeGreaterThan(0);
     for (const w of work) expect(w.end - w.start).toBeGreaterThanOrEqual(15);
+  });
+});
+
+describe('planner rework', () => {
+  it('Nov 11 case: check-in 2, deadline 6 days out and behind pace -> today includes deadline work', () => {
+    const s = sample();
+    s.days['2026-11-11'] = { level: 2, morningEnd: at('2026-11-11T09:00') };
+    const now = at('2026-11-11T19:43');
+    const fc = forecast(s, now);
+    const deadline = fc.days[0].blocks.filter((b) => b.deadline);
+    expect(deadline.length).toBeGreaterThan(0);
+    expect(deadline.some((b) => b.missionId.startsWith('exam'))).toBe(true);
+    const items = layoutDay(s, fc, '2026-11-11', now);
+    expect(items.some((i) => i.kind === 'mission' && i.missionId?.startsWith('exam'))).toBe(true);
+  });
+  it('a low check-in shrinks flexible goals, not deadline pace', () => {
+    const lo = sample(), hi = sample();
+    lo.days['2026-11-12'] = { level: 2, morningEnd: at('2026-11-12T09:00') };
+    hi.days['2026-11-12'] = { level: 4, morningEnd: at('2026-11-12T09:00') };
+    const now = at('2026-11-12T09:00');
+    const dl = (s: State) => forecast(s, now).days[0].blocks.filter((b) => b.deadline).reduce((a, b) => a + b.min, 0);
+    const need = dl(lo);
+    expect(need).toBeGreaterThan(0);
+    expect(dl(hi)).toBeGreaterThanOrEqual(need);
+  });
+  it('lock-in names the deadline driving it, with a daily amount and an end date', () => {
+    const s = sample(); s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
+    const fc = forecast(s, at('2026-11-12T09:00'));
+    expect(fc.lockIn).toBeTruthy();
+    expect(fc.lockIn!.perDay).toBeGreaterThan(0);
+    expect(fc.lockIn!.until >= '2026-11-12').toBe(true);
+  });
+  it('comfortable deadlines leave free time free (no lock-in)', () => {
+    const s = sample();
+    for (const o of s.objectives) if (o.due) o.due = '2027-06-01';
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
+    const fc = forecast(s, at('2026-11-12T09:00'));
+    expect(fc.lockIn).toBeNull();
+    expect(fc.days[0].lock).toBe(false);
+  });
+});
+
+describe('energy model', () => {
+  it('starts flat, copies the first day, then blends with weight max(1/n, 0.1)', async () => {
+    const { curves, dayObservations } = await import('../src/model/energy');
+    const s = sample();
+    expect(curves(s, '2026-11-01').g.every((v: number) => v === 1)).toBe(true);
+    s.days['2026-10-05'] = { level: 3 };
+    s.logs.push(log('course-lessons', '2026-10-05', '09:00', 30));          // on pace at 9:00 -> 1
+    s.days['2026-10-05'].misses = [{ m: 'course-lessons', at: 15 * 60 }];   // missed at 15:00 -> 0.2
+    s.updatedAt = Math.random();
+    const o = dayObservations(s, '2026-10-05');
+    expect(o.get(18)).toBeCloseTo(1); expect(o.get(30)).toBeCloseTo(0.2);
+    const c1 = curves(s, '2026-11-01');
+    expect(c1.g[30]).toBeCloseTo(0.2);                                      // day 2 copies day 1
+    s.days['2026-10-06'] = { level: 3, misses: [] };
+    s.logs.push(log('course-lessons', '2026-10-06', '15:00', 30));          // fine at 15:00 this time
+    s.updatedAt = Math.random();
+    const c2 = curves(s, '2026-11-01');
+    expect(c2.g[30]).toBeCloseTo(0.2 * 0.5 + 1 * 0.5);                      // n = 2 -> weight 1/2
+  });
+  it('puts the hardest work in the highest predicted slots and routines in the dips', () => {
+    const s = sample();
+    for (const d of ['2026-11-05', '2026-10-29']) {                         // Thursdays: mornings missed, mid-afternoon fast
+      s.days[d] = { level: 3, misses: [540, 570, 600, 630, 660, 690].map((at) => ({ m: 'course-lessons', at })) };
+      s.logs.push({ ...log('course-lessons', d, '15:00', 20), plannedMin: 30 }, { ...log('course-lessons', d, '15:30', 20), plannedMin: 30 });
+    }
+    for (const o of s.objectives) if (o.due) o.due = '2027-03-01';        // comfortable deadlines: not a lock-in day
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
+    const now = at('2026-11-12T09:00');
+    const fc = forecast(s, now);
+    expect(fc.lockIn).toBeNull();
+    const items = layoutDay(s, fc, '2026-11-12', now).filter((i) => i.kind === 'mission');
+    const dl = items.filter((i) => i.missionId?.startsWith('exam') || i.missionId?.startsWith('course') || i.missionId?.startsWith('cert'));
+    expect(dl.length).toBeGreaterThan(0);
+    // nothing hard in the mornings he keeps missing, while the strong afternoon is used
+    for (const i of dl) expect(i.start >= 12 * 60 || i.end <= 9 * 60).toBe(true);
+    expect(dl.some((i) => i.start < 16 * 60 && i.end > 15 * 60)).toBe(true);
+    // routines sit in lower-energy time than the hardest block
+    const hab = items.filter((i) => ['cards', 'stretch', 'strength', 'breathe'].includes(i.missionId!));
+    expect(hab.some((i) => i.start < 12 * 60)).toBe(true);
   });
 });

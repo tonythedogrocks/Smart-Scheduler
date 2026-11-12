@@ -1,6 +1,6 @@
 import type { State } from './types';
 
-const COLS = ['skills', 'achDefs', 'objectives', 'missions', 'events', 'logs', 'flares', 'doing', 'measures'] as const;
+const COLS = ['prior', 'skills', 'achDefs', 'objectives', 'missions', 'events', 'logs', 'flares', 'doing', 'measures'] as const;
 type Rec = { id: string; t?: number };
 const bare = (r: any) => JSON.stringify({ ...r, t: undefined });
 

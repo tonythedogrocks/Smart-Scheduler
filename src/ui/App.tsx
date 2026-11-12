@@ -1,7 +1,7 @@
 import { useEffect } from 'preact/hooks';
 import { S, L, actions, go, setLocal, type Nav } from '../model/store';
 import { buildLibrary, type PanelVM } from '../model/vm';
-import { addDays, dateOf, fmtDate, fmtDay, nowTs, diffDays } from '../model/time';
+import { addDays, dateOf, fmtDate, fmtDay, fmtDur, nowTs, diffDays } from '../model/time';
 import { levelName } from '../model/seed';
 import { heroLevel, xpOf } from '../model/game';
 import { Arrow, useStore, useTick } from './bits';
@@ -52,6 +52,21 @@ export function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+  // Missed blocks: if the block that's up now sits unstarted past 10 minutes of grace, log it as missed and re-plan.
+  const cur = !needStatus ? lib.todayItems.find((i) => i.now && i.kind === 'mission' && !i.running && !i.done) : undefined;
+  useEffect(() => {
+    if (!cur?.missionId || S().running || document.visibilityState !== 'visible') return;
+    let w: { date: string; key: string; since: number } | null = null;
+    try { w = JSON.parse(localStorage.getItem('lb-watch') || 'null'); } catch {}
+    const t = nowTs();
+    if (!w || w.date !== today || w.key !== cur.key || t - w.since > 3 * 3600000) w = { date: today, key: cur.key, since: t };
+    else if (t - w.since >= 10 * 60000) {
+      const d = new Date(w.since);
+      actions.recordMiss(cur.missionId, d.getHours() * 60 + d.getMinutes());
+      w = { date: today, key: cur.key, since: t };
+    }
+    try { localStorage.setItem('lb-watch', JSON.stringify(w)); } catch {}
+  });
   useEffect(() => { if (l.toast) { const t = setTimeout(() => setLocal({ toast: undefined }), 2600); return () => clearTimeout(t); } }, [l.toast?.id]);
 
   if (needStatus || l.status) return <StatusReport />;
@@ -101,7 +116,16 @@ export function App() {
                     <Arrow size={26} />
                   </button>
                 )}
-                {risks.slice(0, 1).map((r) => {
+                {lib.fc.lockIn && (() => {
+                  const li = lib.fc.lockIn!, o = s.objectives.find((x) => x.id === li.objectiveId);
+                  return (
+                    <button type="button" class="alert lock" onClick={() => o && go({ view: 'toc', c: o.skillId, i: o.id, ch: 0, p: '' })}>
+                      <span class="k">LOCK IN: {li.title}</span>
+                      <span>Your deadlines need more than a comfortable day{li.today > li.comfort ? ` (today about ${fmtDur(li.today)}, comfortable is about ${fmtDur(li.comfort)})` : ''}. About {fmtDur(li.perDay)} a day on this one until {fmtDate(li.until)}.{li.late.length ? ` Even then, ${li.late.length === 1 ? 'one deadline' : `${li.late.length} deadlines`} may land late.` : ''}</span>
+                    </button>
+                  );
+                })()}
+                {!lib.fc.lockIn && risks.slice(0, 1).map((r) => {
                   const o = s.objectives.find((x) => x.id === r.objectiveId)!;
                   return (
                     <button type="button" class="alert" onClick={() => go({ view: 'page', c: o.skillId, i: o.id, ch: 0, p: 'deadline' })}>

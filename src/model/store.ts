@@ -126,6 +126,12 @@ export const actions = {
       if (meal === 'dinner' && at !== null) d.dinnerTap = mins;
     });
   },
+  /** A planned block passed without being started: log it as missed (feeds the energy model), then the day re-plans. */
+  recordMiss(missionId: string, at: number) {
+    const d0 = S().days[today()];
+    if ((d0?.misses || []).some((x) => x.m === missionId && Math.floor(x.at / 30) === Math.floor(at / 30))) return;
+    mutate((s) => { const d = (s.days[today()] ||= {}); d.misses = [...(d.misses || []), { m: missionId, at }].slice(-40); });
+  },
   /** Dinner's called: dinner starts now, and the time teaches the usual dinner time. */
   dinnerNow() {
     const t = nowTs(), mins = new Date(t).getHours() * 60 + new Date(t).getMinutes();

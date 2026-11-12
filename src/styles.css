@@ -32,6 +32,8 @@ padding:max(14px,env(safe-area-inset-top)) max(20px,env(safe-area-inset-right)) 
 .resume .k{font-family:var(--display);font-size:15px;letter-spacing:.06em;font-weight:400}
 .resume .t{font-family:var(--display);font-size:24px;line-height:1;letter-spacing:.03em;font-weight:400}
 .alert{display:flex;flex-direction:column;gap:2px;width:100%;padding:10px 14px;border:3px solid var(--ink);border-radius:6px;background:#fff;text-align:left;font-size:14px;box-shadow:4px 4px 0 var(--red)}
+.alert.lock{box-shadow:5px 5px 0 var(--ink);background:var(--yellow)}
+.alert.lock .k{color:var(--ink)}
 .alert .k{font-family:var(--display);font-weight:400;font-size:16px;letter-spacing:.06em;color:#B3231A}
 .stacks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 22px;padding:0 10px 10px 0}
 .stack{display:flex;flex-direction:column;justify-content:space-between;gap:6px;min-height:96px;padding:10px 12px;border:3px solid var(--ink);border-radius:4px;text-align:left;

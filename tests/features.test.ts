@@ -476,3 +476,18 @@ describe('preview level does not touch pacing', () => {
     expect(share(mk(4))).toBe(share(mk(2.5)));
   });
 });
+
+describe('predicted levels drive pacing', () => {
+  it('learns the level for a weekday from history, and stronger predicted days take more of the load', async () => {
+    const { learnedLevel } = await import('../src/model/learn');
+    const s = sample();
+    expect(learnedLevel(s, '2026-11-13', '2026-11-12')).toBe(2.5);              // no history: modest baseline
+    for (const d of ['2026-10-23', '2026-10-30', '2026-11-06']) s.days[d] = { level: 4 }; // Fridays usually Active
+    expect(learnedLevel(s, '2026-11-13', '2026-11-12')).toBe(4);
+    const low = sample(); for (const d of ['2026-10-23', '2026-10-30', '2026-11-06']) low.days[d] = { level: 1 };
+    const now = at('2026-11-12T09:00');
+    for (const x of [s, low]) x.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
+    const share = (x: State) => forecast(x, now).days[0].blocks.filter((b) => b.deadline).reduce((a, b) => a + b.min, 0);
+    expect(share(s)).toBeLessThanOrEqual(share(low));
+  });
+});

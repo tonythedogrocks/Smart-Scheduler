@@ -2,7 +2,7 @@ import type { State, Mission, Level, Objective } from './types';
 import { addDays, dateOf, diffDays, minsOf, weekStart, weekday } from './time';
 import { energyBetween, predictedCurve } from './energy';
 import { fixedBlocks, freeSlots, isRest, sunTimes, type Block } from './schedule';
-import { afterStats, weekdayFactor, capacityAt, choreDue, exerciseCeiling, exerciseMinWeek, factor, flareSpike, isExercise, partOf, predictLevel, workMinOn } from './learn';
+import { afterStats, weekdayFactor, learnedLevel, capacityAt, choreDue, exerciseCeiling, exerciseMinWeek, factor, flareSpike, isExercise, partOf, predictLevel, workMinOn } from './learn';
 
 export interface Alloc { missionId: string; units: number; baseMin: number; min: number; habit?: boolean; clock?: boolean; deadline?: boolean; must?: boolean }
 export interface DayAlloc { date: string; level: number; rest: boolean; blocks: Alloc[]; capMin: number; deadlineMin: number; lock: boolean }
@@ -127,6 +127,7 @@ export function forecast(s: State, now: number): Forecast {
     const rest = isRest(s, date);
     const real = s.days[date]?.level;
     const level = t === 0 && real ? real : predictLevel(s, date, today);
+    const paceLevel = t === 0 || real ? level : learnedLevel(s, date, today);
     const fixed = fixedBlocks(s, date);
     const from = t === 0 ? round5(minsOf(now)) : 0;
     const slots = freeSlots(fixed, from);
@@ -152,12 +153,12 @@ export function forecast(s: State, now: number): Forecast {
     if (t === 0) comfort -= workMinOn(s, date) + (run && byId.get(run.missionId)?.kind !== 'habit' ? run.plannedMin : 0);
     const avail = Math.max(0, freeMin);
     comfort = Math.max(0, Math.min(comfort, avail));
-    // pacing judges unreported days at the modest safety level, never the optimistic preview level
-    const curve = predictedCurve(s, date, t === 0 || real ? level : s.settings.baseline, today);
+    // pacing judges unreported days at their predicted level, never the optimistic preview level
+    const curve = predictedCurve(s, date, paceLevel, today);
     const span = slots.length ? energyBetween(curve, slots[0][0], slots[slots.length - 1][1]) : 0;
-    // Deadline pacing weighs days not reported yet at the modest safety level (so today always carries its
-    // fair share); how a future day looks (its room, its timeline) still assumes the optimistic level.
-    const paceComfort = t === 0 || real ? comfort : Math.min(avail, capacityAt(s, s.settings.baseline, today) * weekdayFactor(s, today, weekday(date)));
+    // Deadline pacing weighs days not reported yet at the level predicted from his history; how a future
+    // day looks (its room, its timeline) uses the optimistic preview level.
+    const paceComfort = t === 0 || real ? comfort : Math.min(avail, capacityAt(s, paceLevel, today) * weekdayFactor(s, today, weekday(date)));
     const weight = rest || avail <= 0 ? 0 : Math.max(paceComfort, avail * 0.25) * span;
     infos.push({ date, rest, level, avail, comfort, weight, routines });
   }

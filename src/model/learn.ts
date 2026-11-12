@@ -112,6 +112,29 @@ export function capacityAt(s: State, level: number, today: string, optimistic = 
 }
 
 /** Predicted level for a future day; never above the planning baseline. */
+/** Every known daily level (this app's check-ins plus imported history), by date. */
+function levelHistory(s: State, today: string): [string, number][] {
+  const m = new Map<string, number>();
+  for (const p of s.prior || []) if (p.level && p.date < today) m.set(p.date, p.level);
+  for (const [d, r] of Object.entries(s.days)) if (r.level && d < today) m.set(d, r.level);
+  return [...m.entries()].sort(([a], [b]) => a.localeCompare(b));
+}
+
+/**
+ * The level the app predicts for a day, for pacing: his usual level on that weekday (3+ of them),
+ * else his recent average (5+ days), else the modest baseline; a day after Plus Ultra drops once
+ * that crash pattern is confident. Not capped: the safety buffer before each deadline absorbs misses.
+ */
+export function learnedLevel(s: State, date: string, today: string): number {
+  if (s.days[date]?.level) return s.days[date].level!;
+  const h = levelHistory(s, today);
+  const same = h.filter(([d]) => weekday(d) === weekday(date)).slice(-6).map(([, l]) => l);
+  const recent = h.slice(-14).map(([, l]) => l);
+  let p = same.length >= 3 ? same.reduce((a, b) => a + b, 0) / same.length : recent.length >= 5 ? recent.reduce((a, b) => a + b, 0) / recent.length : s.settings.baseline;
+  if (crashAfter5(s, today).confident && s.days[addDays(date, -1)]?.level === 5) p -= 1;
+  return clamp(p, 1, 5);
+}
+
 /** Level assumed for a day not reported yet: Active (optimal), as he asked, until he reports in that day. */
 export function predictLevel(s: State, date: string, _today: string): number {
   return s.days[date]?.level ?? s.settings.aheadLevel ?? 4;

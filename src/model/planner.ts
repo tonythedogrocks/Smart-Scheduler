@@ -152,7 +152,8 @@ export function forecast(s: State, now: number): Forecast {
     if (t === 0) comfort -= workMinOn(s, date) + (run && byId.get(run.missionId)?.kind !== 'habit' ? run.plannedMin : 0);
     const avail = Math.max(0, freeMin);
     comfort = Math.max(0, Math.min(comfort, avail));
-    const curve = predictedCurve(s, date, level, today);
+    // pacing judges unreported days at the modest safety level, never the optimistic preview level
+    const curve = predictedCurve(s, date, t === 0 || real ? level : s.settings.baseline, today);
     const span = slots.length ? energyBetween(curve, slots[0][0], slots[slots.length - 1][1]) : 0;
     // Deadline pacing weighs days not reported yet at the modest safety level (so today always carries its
     // fair share); how a future day looks (its room, its timeline) still assumes the optimistic level.

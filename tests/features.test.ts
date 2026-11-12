@@ -467,3 +467,12 @@ describe('planning ahead', () => {
     expect(items.some((i) => i.now)).toBe(false);
   });
 });
+
+describe('preview level does not touch pacing', () => {
+  it('assuming Active for unreported days leaves today\'s deadline share unchanged', async () => {
+    const mk = (ahead: number) => { const s = sample(); s.settings.aheadLevel = ahead; s.days['2026-11-12'] = { level: 2, morningEnd: at('2026-11-12T09:00') }; return s; };
+    const now = at('2026-11-12T09:00');
+    const share = (s: State) => forecast(s, now).days[0].blocks.filter((b) => b.deadline).reduce((a, b) => a + b.min, 0);
+    expect(share(mk(4))).toBe(share(mk(2.5)));
+  });
+});

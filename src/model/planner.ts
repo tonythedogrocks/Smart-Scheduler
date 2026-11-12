@@ -538,9 +538,11 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   };
   for (const a of order) {
     const m = byId.get(a.missionId); if (!m) continue;
-    const gapM = m.mealGap ?? gap;
-    // workouts wait after meals; so does anything with its own meal gap (e.g. a strength routine), doubled after a large meal
-    const waits = m.workout || m.mealGap !== undefined;
+    // biking there and back is light cardio: about an hour after a regular meal
+    const ride = !!m.bike && !!m.travel;
+    const gapM = m.mealGap ?? (ride && !m.workout ? 60 : gap);
+    // workouts wait after meals; so do rides and anything with its own meal gap (e.g. a strength routine), doubled after a large meal
+    const waits = m.workout || ride || m.mealGap !== undefined;
     const bigGap = m.workout ? Math.max(gapM, s.settings.bigMealGap) : gapM * 2;
     const forbid: [number, number][] = waits ? fixed.filter((b) => b.kind === 'meal').map((b) => [b.start, b.end + (b.big ? bigGap : gapM)] as [number, number]) : [];
     // daylight-only (sunrise to sunset) and errand windows, travel included

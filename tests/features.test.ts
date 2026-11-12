@@ -580,3 +580,16 @@ describe('continue later on a one-off task', () => {
   });
 });
 
+describe('biking errands wait after meals', () => {
+  it('a bike errand does not start within an hour of lunch', () => {
+    const s = sample();
+    const m = s.missions.find((x) => x.id === 'course-lessons')!;
+    Object.assign(m, { minutes: 30, unitsLeft: 1, labels: undefined, errand: true, travel: 20, bike: true, onDate: '2026-11-12', energy: 'none' });
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00'), ate: { lunch: { at: 750 } } };
+    const now = at('2026-11-12T12:00');
+    const items = layoutDay(s, forecast(s, now), '2026-11-12', now).filter((i) => i.missionId === 'course-lessons');
+    const lunch = layoutDay(s, forecast(s, now), '2026-11-12', now).find((i) => i.block?.kind === 'meal' && i.start >= 700 && i.start < 800)!;
+    expect(items.length).toBe(1);
+    expect(items[0].start >= lunch.end + 60 || items[0].end <= lunch.start).toBe(true);
+  });
+});

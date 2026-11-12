@@ -47,6 +47,8 @@ describe('planner', () => {
     if (total > 215) expect(fc.lockIn).toBeTruthy();
     expect(new Set(work.map((b) => b.missionId)).size).toBeGreaterThanOrEqual(2);
     const s5 = fresh(5);
+    // with deadline work that leaves room on the day (a full backlog would take all of it)
+    for (const m of s5.missions) if (m.kind === 'work') m.unitsLeft = Math.min(m.unitsLeft || 0, 4);
     const f5 = forecast(s5, now);
     const w5 = f5.days[0].blocks.map((b) => b.missionId);
     // a big day makes room for goals with no deadline, unless deadlines have it in lock-in

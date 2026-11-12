@@ -131,7 +131,11 @@ export function forecast(s: State, now: number): Forecast {
     const fixed = fixedBlocks(s, date);
     const from = t === 0 ? round5(minsOf(now)) : 0;
     const slots = freeSlots(fixed, from);
-    let freeMin = slots.reduce((a, [x, y]) => a + (y - x), 0);
+    // usable time, not every free minute: gaps under 15 min don't count, and blocks need breaks between them
+    const brk = s.settings.breakMin ?? 10;
+    let freeMin = slots.reduce((a, [x, y]) => a + (y - x >= 15 ? (y - x) * 60 / (60 + brk) : 0), 0);
+    // hands-on steps of chores due (e.g. laundry) take their minutes and a break each
+    for (const c of live) if (c.kind === 'chore' && c.steps?.length && t <= 1) { const due = choreDue(s, c); if (due && due <= date && !s.logs.some((l) => l.missionId === c.id && l.date === date && l.done && l.step === c.steps!.length - 1)) freeMin -= c.steps.reduce((a, st) => a + st.min + brk, 0); }
     if (t === 0 && run) freeMin -= Math.max(0, run.plannedMin * (f.get(run.missionId) || 1) - (now - run.startedAt) / 60000);
     const routines: Alloc[] = [];
     for (const m of habitsDue(s, date, level, last)) {
@@ -529,7 +533,24 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   const curve = predictedCurve(s, date, level, today);
   const hardness = (a: Alloc) => { const m = byId.get(a.missionId); return a.habit || !m ? 0 : (a.deadline ? 3 : 1) + (m.energy === 'mental' ? 1 : 0) + (a.clock ? 0.5 : 0); };
   // anything pinned to today first (it can't move to another day), then routines (into the dips) so the floor fits; then hardest work into the best of what's left
-  const order = [...day.blocks].sort((a, b) => Number(!!b.must && !b.habit) - Number(!!a.must && !a.habit) || Number(!!b.habit) - Number(!!a.habit) || Number(!!b.must) - Number(!!a.must) || hardness(b) - hardness(a));
+  // Tomorrow also takes whatever today's share couldn't be fitted onto today's clock (not things pinned to today).
+  const blocks = [...day.blocks];
+  if (tIdx === 1) {
+    const placed = new Map<string, number>();
+    for (const it of layoutDay(s, fc, today, now)) if (it.kind === 'mission' && it.missionId && !it.done) placed.set(it.missionId, (placed.get(it.missionId) || 0) + (it.units || 1));
+    const want = new Map<string, Alloc>();
+    for (const b of fc.days[0]?.blocks || []) {
+      const m = byId.get(b.missionId);
+      if (b.habit || !m || m.kind !== 'work' || m.onDate || m.rotation?.length) continue;
+      const w = want.get(b.missionId);
+      if (w) { w.units += b.units; w.min += b.min; w.baseMin += b.baseMin; } else want.set(b.missionId, { ...b });
+    }
+    for (const [id, w] of want) {
+      const short = w.units - (placed.get(id) || 0);
+      if (short > 0) blocks.push({ ...w, units: short, min: Math.round(w.min * short / w.units), baseMin: Math.round(w.baseMin * short / w.units) });
+    }
+  }
+  const order = blocks.sort((a, b) => Number(!!b.must && !b.habit) - Number(!!a.must && !a.habit) || Number(!!b.habit) - Number(!!a.habit) || Number(!!b.must) - Number(!!a.must) || hardness(b) - hardness(a));
   const sun = s.settings.sun ? sunTimes(date, s.settings.sun.lat, s.settings.sun.lon) : null;
   /** Every start (5-min steps) that fits, scored by predicted energy; hard work takes the best, light work the dips. */
   const pick = (len: number, lo: number, fb: [number, number][], hi: number, light: boolean, outdoor = false): { i: number; a: number } | null => {

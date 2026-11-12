@@ -88,6 +88,9 @@ box-shadow:5px 5px 0 -3px #fff,5px 5px 0 0 var(--ink),10px 10px 0 -3px #fff,10px
 .burst{align-self:center;width:270px;height:130px;background:var(--ink);display:flex;align-items:center;justify-content:center;animation:lbPop 420ms cubic-bezier(.2,.9,.25,1) both}
 .burst,.burst div{clip-path:polygon(50% 0%,59% 14%,74% 5%,76% 21%,93% 18%,88% 34%,100% 43%,89% 54%,97% 69%,81% 71%,80% 88%,65% 82%,56% 100%,46% 85%,32% 96%,29% 80%,12% 84%,16% 67%,0% 60%,11% 48%,2% 34%,18% 31%,17% 14%,33% 18%,40% 3%)}
 .burst div{width:256px;height:116px;background:var(--yellow);display:flex;align-items:center;justify-content:center;text-align:center;font-family:var(--display);font-size:26px;line-height:.95;letter-spacing:.04em}
+/* iPhone Safari gives date/time pickers a wide built-in minimum and centers them: let them shrink and sit left */
+.field input[type=time],.field input[type=date]{-webkit-appearance:none;appearance:none;display:block;text-align:left;line-height:40px}
+.field input[type=time]::-webkit-date-and-time-value,.field input[type=date]::-webkit-date-and-time-value{text-align:left;margin:0}
 /* day timeline */
 .tl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
 .tl li{display:grid;grid-template-columns:4.4rem 1fr;gap:10px;align-items:start}
@@ -124,7 +127,8 @@ box-shadow:5px 5px 0 -3px #fff,5px 5px 0 0 var(--ink),10px 10px 0 -3px #fff,10px
 .rate button{height:44px;padding:0;border:3px solid var(--ink);border-radius:4px;background:#fff;font-family:var(--display);font-size:18px}
 .rate button.on{background:var(--red);color:#fff}
 .field{display:flex;flex-direction:column;gap:4px;font-size:14px;flex:1;min-width:120px}
-.field input,.field select{height:46px;padding:0 10px;border:3px solid var(--ink);border-radius:6px;background:#fff;font-size:16px;font-weight:700;width:100%;user-select:text;-webkit-user-select:text}
+.field{justify-content:flex-end;align-self:stretch}
+.field input,.field select{min-width:0;max-width:100%;box-sizing:border-box;height:46px;padding:0 10px;border:3px solid var(--ink);border-radius:6px;background:#fff;font-size:16px;font-weight:700;width:100%;user-select:text;-webkit-user-select:text}
 .check{display:flex;align-items:center;gap:10px;min-height:44px;font-size:15px}
 .check input{width:24px;height:24px;accent-color:var(--blue)}
 .warn{padding:10px 12px;border:3px solid #B3231A;border-radius:6px;background:#fff;color:#B3231A;font-size:14px}

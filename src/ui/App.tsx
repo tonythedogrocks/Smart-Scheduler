@@ -1,7 +1,8 @@
-import { useEffect } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { S, L, actions, go, setLocal, type Nav } from '../model/store';
 import { buildLibrary, type PanelVM } from '../model/vm';
 import { GRACE, planSig } from '../model/planner';
+import { onSyncStatus, syncStatus } from '../model/sync';
 import type { PlanSnap } from '../model/types';
 import { addDays, dateOf, fmtDate, fmtDay, fmtDur, nowTs, diffDays } from '../model/time';
 import { levelName } from '../model/seed';
@@ -30,6 +31,8 @@ function Cell({ p, onOpen }: { p: PanelVM; onOpen: () => void }) {
 
 export function App() {
   useStore();
+  const [, bumpSync] = useState(0);
+  useEffect(() => onSyncStatus(() => bumpSync((n) => n + 1)), []);
   useTick(30000);
   const s = S(), l = L(), now = nowTs(), today = dateOf(now);
   const needStatus = !s.days[today]?.level;
@@ -153,6 +156,12 @@ export function App() {
                 <span>Needed about {fmtDay(a.date) === fmtDay(addDays(today, 1)) ? 'tomorrow' : fmtDate(a.date)}. It will be planned around when you're home.</span>
               </div>
             ))}
+            {syncStatus().state === 'error' && /token|allowed|not found/i.test(syncStatus().error || '') && (
+              <button type="button" class="alert" onClick={() => go({ view: 'settings' })}>
+                <span class="k">SYNC ISN'T WORKING</span>
+                <span>{syncStatus().error} Your changes are saved on this device but aren't reaching your other one. Tap to fix it in Settings.</span>
+              </button>
+            )}
             {!s.skills.length && (
               <button type="button" class="alert" style="box-shadow:4px 4px 0 var(--ink)" onClick={() => go({ view: 'settings' })}>
                 <span class="k" style="color:var(--ink)">NOTHING ON THE SHELF YET</span>

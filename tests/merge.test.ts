@@ -52,3 +52,24 @@ describe('sync merge', () => {
     expect(JSON.stringify(merge(m, a))).toBe(JSON.stringify(merge(merge(m, a), a)));
   });
 });
+
+describe('days merge field by field', () => {
+  it('a stale device re-reporting its level does not wipe fields it never changed', () => {
+    const base = sample();
+    base.days['2026-11-12'] = { level: 4 };
+    const phone = edit(base, 100, (s) => { s.days['2026-11-12'].level = 4; (s.days['2026-11-12'] as any).setAt = 100; });   // stale copy, touched later
+    const mac = edit(base, 50, (s) => { Object.assign(s.days['2026-11-12'], { morningEnd: 40, lunchMin: 60, cookAt: 1050 }); });
+    for (const m of [merge(mac, phone), merge(phone, mac)]) {
+      const d = m.days['2026-11-12'];
+      expect(d.morningEnd).toBe(40); expect(d.lunchMin).toBe(60); expect(d.cookAt).toBe(1050);
+      expect((d as any).setAt).toBe(100);
+    }
+  });
+  it('the later change to the same field still wins', () => {
+    const base = sample(); base.days['2026-11-12'] = { cookAt: 1110 };
+    const a = edit(base, 10, (s) => { s.days['2026-11-12'].cookAt = 1050; });
+    const b = edit(base, 20, (s) => { s.days['2026-11-12'].cookAt = 1080; });
+    expect(merge(a, b).days['2026-11-12'].cookAt).toBe(1080);
+    expect(merge(b, a).days['2026-11-12'].cookAt).toBe(1080);
+  });
+});

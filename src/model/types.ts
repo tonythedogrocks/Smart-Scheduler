@@ -77,7 +77,7 @@ export interface Log {
   plannedMin: number; units: number; done: boolean; level?: Level; xp?: number; step?: number;
 }
 
-export interface DayRec { t?: number; level?: Level; setAt?: number; floorAwarded?: boolean; lunchAt?: number; dinnerAt?: number; lunchMin?: number; dinnerMin?: number; starts?: Record<string, number>; cook?: boolean | 'family'; cookAt?: number; cookStart?: number; cookEnd?: number; morningEnd?: number; dinnerTap?: number;
+export interface DayRec { t?: number; ft?: Record<string, number>; level?: Level; setAt?: number; floorAwarded?: boolean; lunchAt?: number; dinnerAt?: number; lunchMin?: number; dinnerMin?: number; starts?: Record<string, number>; cook?: boolean | 'family'; cookAt?: number; cookStart?: number; cookEnd?: number; morningEnd?: number; dinnerTap?: number;
   ate?: Partial<Record<'lunch' | 'dinner', { at: number; big?: boolean }>>;
   misses?: { m: string; at: number }[];
   plan?: { sig: string; items: PlanSnap[] }; // today's plan once the day has started: kept until something real changes or a block is missed // planned blocks that passed without being started (start time, minutes) // confirmed meals: start (minutes from midnight), and whether it was a large one

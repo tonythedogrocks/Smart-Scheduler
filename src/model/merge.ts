@@ -12,7 +12,17 @@ export function stamp(prev: State, next: State, t: number) {
     for (const r of (next[c] || []) as Rec[]) { ids.add(r.id); if (old.get(r.id) !== bare(r)) r.t = t; }
     for (const id of old.keys()) if (!ids.has(id)) (next.deleted ||= {})[id] = t;
   }
-  for (const [k, d] of Object.entries(next.days || {})) if (!prev.days?.[k] || bare(prev.days[k]) !== bare(d)) d.t = t;
+  // days are stamped field by field, so a device only ever overrides what it actually changed
+  for (const [k, d] of Object.entries(next.days || {})) {
+    const p = prev.days?.[k];
+    if (p && bare(p) === bare(d)) continue;
+    const ft: Record<string, number> = { ...(p?.ft || d.ft || {}) };
+    for (const f of new Set([...Object.keys(p || {}), ...Object.keys(d)])) {
+      if (f === 't' || f === 'ft') continue;
+      if (JSON.stringify((p as any)?.[f]) !== JSON.stringify((d as any)[f])) ft[f] = t;
+    }
+    d.ft = ft; d.t = t;
+  }
   if (JSON.stringify(prev.settings) !== JSON.stringify(next.settings)) next.settingsT = t;
   if (JSON.stringify(prev.running) !== JSON.stringify(next.running)) next.runningT = t;
 }
@@ -35,7 +45,22 @@ export function merge(a: State, b: State): State {
   out.logs.sort((x, y) => x.start - y.start);
   out.measures.sort((x, y) => x.date.localeCompare(y.date));
   out.days ||= {};
-  for (const [k, d] of Object.entries(b.days || {})) if (!out.days[k] || (d.t || 0) > (out.days[k].t || 0)) out.days[k] = structuredClone(d);
+  for (const [k, d] of Object.entries(b.days || {})) {
+    const x = out.days[k];
+    if (!x) { out.days[k] = structuredClone(d); continue; }
+    // field by field: for each field keep the side that changed it last (older copies fall back to the record's time)
+    const m: any = {}, ft: Record<string, number> = {};
+    for (const f of new Set([...Object.keys(x), ...Object.keys(d)])) {
+      if (f === 't' || f === 'ft') continue;
+      // a copy that tracks fields but never touched this one is the oldest word on it; untracked (older) copies use the record's time
+      const ta = x.ft ? x.ft[f] ?? 0 : x.t ?? 0, tb = d.ft ? d.ft[f] ?? 0 : d.t ?? 0;
+      const src: any = tb > ta ? d : x;
+      if (src[f] !== undefined) m[f] = structuredClone(src[f]);
+      ft[f] = Math.max(ta, tb);
+    }
+    m.ft = ft; m.t = Math.max(x.t || 0, d.t || 0);
+    out.days[k] = m;
+  }
   if ((b.settingsT || 0) > (a.settingsT || 0)) { out.settings = structuredClone(b.settings); out.settingsT = b.settingsT; }
   if ((b.runningT || 0) > (a.runningT || 0)) { out.running = b.running ? { ...b.running } : undefined; out.runningT = b.runningT; }
   for (const key of ['achievements', 'claimed'] as const) {

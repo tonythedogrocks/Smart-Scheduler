@@ -80,7 +80,7 @@ export interface Log {
 export interface DayRec {
   mealMoved?: { lunch?: number; dinner?: number }; // where the app last moved an uneaten meal (it waits 30 min before moving it again)
   t?: number; ft?: Record<string, number>; level?: Level; setAt?: number; floorAwarded?: boolean; lunchAt?: number; dinnerAt?: number; lunchMin?: number; dinnerMin?: number; starts?: Record<string, number>; cook?: boolean | 'family'; cookAt?: number; cookStart?: number; cookEnd?: number; morningEnd?: number; dinnerTap?: number;
-  ate?: Partial<Record<'lunch' | 'dinner', { at: number; big?: boolean }>>;
+  ate?: Partial<Record<'lunch' | 'dinner', { at: number; big?: boolean; end?: number }>>; // end: when he tapped done eating
   misses?: { m: string; at: number }[];
   plan?: { sig: string; items: PlanSnap[] }; // today's plan once the day has started: kept until something real changes or a block is missed // planned blocks that passed without being started (start time, minutes) // confirmed meals: start (minutes from midnight), and whether it was a large one
 }

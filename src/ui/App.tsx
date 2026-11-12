@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { S, L, actions, go, setLocal, type Nav } from '../model/store';
 import { buildLibrary, type PanelVM } from '../model/vm';
 import { GRACE, planSig } from '../model/planner';
+import { eatingNow } from '../model/schedule';
 import { onSyncStatus, syncStatus } from '../model/sync';
 import type { PlanSnap } from '../model/types';
 import { addDays, dateOf, fmtDate, fmtDay, fmtDur, nowTs, diffDays } from '../model/time';
@@ -78,6 +79,8 @@ export function App() {
   useEffect(() => {
     if (needStatus || S().running || document.visibilityState !== 'visible') return;
     const t = new Date(nowTs()), nm = t.getHours() * 60 + t.getMinutes();
+    // still eating: nothing counts as missed until he taps done
+    if (eatingNow(S(), today, nm)) return;
     const late = lib.todayItems.find((i) => i.kind === 'mission' && !i.done && !i.running && i.missionId && i.start + GRACE <= nm);
     if (late) actions.recordMiss(late.missionId!, late.start);
     else {

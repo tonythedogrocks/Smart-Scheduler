@@ -92,9 +92,10 @@ export function fixedBlocks(s: State, date: string): Block[] {
     // a confirmed meal sits exactly where it happened
     const got = day.ate?.[meal];
     if (got) {
-      out.push({ key: `f:${meal}`, start: got.at, end: got.at + len, title, sub: `Ate at ${fmtT(got.at)}${got.big ? ' · large meal' : ''}`, kind: 'meal', meal, blocking: true, ate: true, big: got.big });
-      busy.push([got.at, got.at + len]);
-      return got.at + len;
+      const end = got.end !== undefined && got.end > got.at ? got.end : got.at + len;
+      out.push({ key: `f:${meal}`, start: got.at, end, title, sub: `Ate at ${fmtT(got.at)}${got.end !== undefined ? ` to ${fmtT(got.end)}` : ''}${got.big ? ' · large meal' : ''}`, kind: 'meal', meal, blocking: true, ate: true, big: got.big });
+      busy.push([got.at, end]);
+      return end;
     }
     let at = -1;
     if (free(want, len)) at = want;
@@ -147,4 +148,15 @@ export function freeSlots(blocks: Block[], from: number): [number, number][] {
   }
   if (off.start > cur) out.push([cur, off.start]);
   return out;
+}
+
+/** A meal he started today and hasn't tapped done on, still within twice its usual length (after that, assume he forgot). */
+export function eatingNow(s: State, date: string, nowMin: number): 'lunch' | 'dinner' | null {
+  const d = s.days[date];
+  for (const meal of ['lunch', 'dinner'] as const) {
+    const got = d?.ate?.[meal]; if (!got || got.end !== undefined || nowMin < got.at) continue;
+    const len = meal === 'lunch' ? d!.lunchMin ?? s.settings.lunchMin : d!.dinnerMin ?? s.settings.dinnerMin;
+    if (nowMin < got.at + 2 * len) return meal;
+  }
+  return null;
 }

@@ -89,6 +89,14 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
                 <input type="time" aria-label="Time you ate" value={toHM(got.at)} style="height:44px;padding:0 8px;border:3px solid var(--ink);border-radius:6px;font-weight:700" onChange={(e) => actions.ate(p.meal!, fromHM((e.target as HTMLInputElement).value))} />
                 <button type="button" class={`small ${got.big ? 'on' : ''}`} onClick={() => actions.ate(p.meal!, got.at, !got.big)}>Large meal</button>
               </div>
+              {got.end === undefined ? (
+                <button type="button" class="big fin sm" onClick={() => actions.doneEating(p.meal!)}>DONE EATING</button>
+              ) : (
+                <div class="row">
+                  <span style="font-size:15px">Done at</span>
+                  <input type="time" aria-label="Time you finished eating" value={toHM(got.end)} style="height:44px;padding:0 8px;border:3px solid var(--ink);border-radius:6px;font-weight:700" onChange={(e) => { const v = (e.target as HTMLInputElement).value; if (v) actions.doneEating(p.meal!, fromHM(v)); }} />
+                </div>
+              )}
               <span class="soft" style="font-size:14px">Workouts wait {fmtDur(got.big ? Math.max(s.settings.mealGap, s.settings.bigMealGap) : s.settings.mealGap)} after it.</span>
               <button type="button" class="plain" onClick={() => actions.ate(p.meal!, null)}>Haven't eaten yet after all</button>
             </>

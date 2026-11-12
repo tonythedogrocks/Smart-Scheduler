@@ -1,7 +1,7 @@
 import type { State, Mission, Level, Objective } from './types';
 import { addDays, dateOf, diffDays, minsOf, weekStart, weekday } from './time';
 import { energyBetween, predictedCurve } from './energy';
-import { eventsOn, fixedBlocks, freeSlots, isRest, sunTimes, type Block } from './schedule';
+import { eatingNow, eventsOn, fixedBlocks, freeSlots, isRest, sunTimes, type Block } from './schedule';
 import { afterStats, weekdayFactor, learnedLevel, capacityAt, choreDue, exerciseCeiling, exerciseMinWeek, factor, flareSpike, isExercise, partOf, predictLevel, workMinOn } from './learn';
 
 export interface Alloc { missionId: string; units: number; baseMin: number; min: number; habit?: boolean; clock?: boolean; deadline?: boolean; must?: boolean }
@@ -424,6 +424,9 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   // Today the morning routine isn't over until he taps Done: it runs on to now, and nothing starts before it ends.
   const morningOpen = isToday && !s.days[date]?.morningEnd;
   if (morningOpen) { const mb = fixed.find((b) => b.key === 'f:morning'); if (mb && mb.end < round5(nowMin)) mb.end = round5(nowMin); }
+  // a meal he started and hasn't tapped done on runs on to now (up to twice its length, in case he forgot)
+  const eating = isToday ? eatingNow(s, date, nowMin) : null;
+  if (eating) { const mb = fixed.find((b) => b.kind === 'meal' && b.meal === eating); if (mb && mb.end < round5(nowMin)) mb.end = round5(nowMin); }
   const byId = new Map(s.missions.map((m) => [m.id, m]));
   const items: PlanItem[] = fixed.map((b) => ({ key: b.key, start: b.start, end: b.end, title: b.title, sub: b.sub, kind: 'fixed' as const, block: b, past: b.end <= nowMin && b.kind !== 'note' && !(morningOpen && b.key === 'f:morning') }));
   const occ = new Map<string, number>();

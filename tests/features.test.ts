@@ -656,3 +656,21 @@ describe('late meals with no room', () => {
     expect(d.plan!.sig).not.toBe(planSig(S(), '2026-11-12'));
   });
 });
+
+describe('meal start and end', () => {
+  it('a meal runs until done is tapped, then ends where he tapped it', async () => {
+    const { actions, S, adopt } = await import('../src/model/store');
+    const { setNowOverride } = await import('../src/model/time');
+    const s = sample();
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00'), lunchMin: 30 };
+    adopt(s);
+    setNowOverride('2026-11-12T12:30:00'); actions.ate('lunch');
+    let now = at('2026-11-12T13:15');
+    let lunch = layoutDay(S(), forecast(S(), now), '2026-11-12', now).find((i) => i.block?.meal === 'lunch')!;
+    expect(lunch.end).toBe(795); // still eating at 1:15, past the planned 30 min
+    setNowOverride('2026-11-12T13:20:00'); actions.doneEating('lunch'); setNowOverride(null);
+    now = at('2026-11-12T13:40');
+    lunch = layoutDay(S(), forecast(S(), now), '2026-11-12', now).find((i) => i.block?.meal === 'lunch')!;
+    expect([lunch.start, lunch.end]).toEqual([750, 800]);
+  });
+});

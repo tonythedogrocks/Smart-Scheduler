@@ -176,10 +176,20 @@ export const actions = {
     const t = nowTs(), mins = at ?? new Date(t).getHours() * 60 + new Date(t).getMinutes();
     mutate((s) => {
       const d = (s.days[today()] ||= {}); const cur = { ...(d.ate || {}) };
-      if (at === null) delete cur[meal]; else cur[meal] = { at: mins, ...(big ?? cur[meal]?.big ? { big: true } : {}) };
+      const keepEnd = cur[meal]?.end !== undefined && cur[meal]!.at === mins ? { end: cur[meal]!.end } : {};
+      if (at === null) delete cur[meal]; else cur[meal] = { at: mins, ...(big ?? cur[meal]?.big ? { big: true } : {}), ...keepEnd };
       if (at !== null && big === false) delete cur[meal]!.big;
       d.ate = cur;
       if (meal === 'dinner' && at !== null) d.dinnerTap = mins;
+    });
+  },
+  /** Done eating: the meal ends now (or at the given time), and what comes after can start. */
+  doneEating(meal: 'lunch' | 'dinner', at?: number | null) {
+    const t = nowTs(), mins = at ?? new Date(t).getHours() * 60 + new Date(t).getMinutes();
+    mutate((s) => {
+      const d = (s.days[today()] ||= {}), cur = d.ate?.[meal]; if (!cur) return;
+      const next = { ...cur }; if (at === null) delete next.end; else next.end = Math.max(cur.at + 1, mins);
+      d.ate = { ...(d.ate || {}), [meal]: next };
     });
   },
   /** Re-check today's floor (a routine can become excused later, e.g. after a meal); only writes if it's newly met. */

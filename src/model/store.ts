@@ -2,7 +2,8 @@ import { get, set } from 'idb-keyval';
 import type { State, Level, Evt, Mission, Objective, Log, PlanSnap } from './types';
 import { seed, withDefaults } from './seed';
 import { dateOf, nowTs, uid } from './time';
-import { excusedHabits, habitsDue, GRACE } from './planner';
+import { describeUnits, excusedHabits, habitsDue, nextGap, nextLabels, GRACE } from './planner';
+import { factor } from './learn';
 import { unlock } from './game';
 import { stamp } from './merge';
 
@@ -90,6 +91,22 @@ export const actions = {
     mutate((s) => {
       const r = s.running; if (!r) return;
       const date = today(), end = nowTs();
+      const m0 = s.missions.find((x) => x.id === r.missionId);
+      const putBack = (units: number, min: number) => {
+        // the rest goes to the next free gap today; everything else stays where it is (nothing fits: back to the pool)
+        const pl = s.days[date]?.plan; if (!pl || !m0 || units <= 0 || min < 5) return;
+        const nm = new Date(end).getHours() * 60 + new Date(end).getMinutes();
+        const at = nextGap(s, date, nm + 5, min); if (at === null) return;
+        const named = m0.kind === 'work' ? describeUnits(nextLabels(m0, units)) : '';
+        pl.items.push({ key: `m:${m0.id}:later${end % 100000}`, missionId: m0.id, start: at, end: at + min, title: m0.title, sub: `${named ? named + ' · ' : ''}about ${min} min`, detail: m0.note, units, baseMin: m0.kind === 'work' ? units * m0.minutes : r.plannedMin, min, ...(r.step !== undefined ? { step: r.step } : {}) });
+        pl.items.sort((a, b) => a.start - b.start);
+      };
+      // changed your mind right away: not an attempt, nothing logged; the block moves later
+      if (!done && end - r.startedAt < 2 * 60000 && !r.ticked) {
+        s.running = undefined;
+        putBack(r.units, Math.round(r.plannedMin * factor(s, r.missionId)));
+        return;
+      }
       // stopping partway still counts the steps ticked off; the rest goes back to the pool
       const doneUnits = done ? r.units : Math.min(r.units, r.ticked || 0);
       const log: Log = { id: uid(), missionId: r.missionId, date, start: r.startedAt, end, plannedMin: r.plannedMin, units: doneUnits, done, level: s.days[date]?.level, xp: Math.round(Math.min((end - r.startedAt) / 60000, Math.max(r.plannedMin * 2, 10))), ...(r.step !== undefined ? { step: r.step } : {}) };
@@ -102,6 +119,11 @@ export const actions = {
       if (doneUnits > 0 && m?.kind === 'work') {
         m.unitsLeft = Math.max(0, (m.unitsLeft || 0) - doneUnits);
         if (m.unitsLeft === 0) m.doneAt = date;
+      }
+      if (!done && s.days[date]?.plan) {
+        const restUnits = r.units - doneUnits;
+        const restMin = m?.kind === 'work' ? Math.round(restUnits * m.minutes * factor(s, m.id)) : Math.round(r.plannedMin * factor(s, r.missionId));
+        putBack(restUnits, restMin);
       }
       const before = !!s.days[date]?.floorAwarded;
       got = afterChange(s, date);

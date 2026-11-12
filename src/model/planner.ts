@@ -624,6 +624,14 @@ export function excusedHabits(s: State, now: number): Set<string> {
   return out;
 }
 
+/** First start time today at or after `fromMin` with `len` free minutes, around fixed blocks and today's planned blocks. */
+export function nextGap(s: State, date: string, fromMin: number, len: number): number | null {
+  let slots = freeSlots(fixedBlocks(s, date), round5(fromMin));
+  for (const p of s.days[date]?.plan?.items || []) slots = slots.flatMap(([a, b]) => (p.end <= a || p.start >= b ? [[a, b]] : [[a, p.start], [p.end, b]]).filter(([x, y]) => y - x >= 5) as [number, number][]);
+  const g = slots.find(([a, b]) => b - a >= len);
+  return g ? g[0] : null;
+}
+
 /** Orders: the single thing to do now, and what follows. */
 export function orders(items: PlanItem[]) {
   const i = items.findIndex((x) => x.now);

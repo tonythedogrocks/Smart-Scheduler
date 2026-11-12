@@ -525,3 +525,24 @@ describe('a fixed plan for today', () => {
     expect(items.every((i) => i.start >= nowMin - 1)).toBe(true);
   });
 });
+
+describe('stop here', () => {
+  it('moves the rest of the block to the next free gap today; stopping right away logs nothing', async () => {
+    const { actions, S, adopt } = await import('../src/model/store');
+    const { setNowOverride } = await import('../src/model/time');
+    setNowOverride('2026-11-12T10:00:00');
+    const s = sample();
+    for (const o of s.objectives) if (o.due) o.due = '2027-03-01';
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00'), plan: { sig: 'x', items: [{ key: 'm:course-lessons:0', missionId: 'course-lessons', start: 600, end: 660, title: 'Course', units: 2, baseMin: 60, min: 60 }] } };
+    adopt(s);
+    const logs0 = S().logs.length;
+    actions.start('course-lessons', 2, 60, undefined, 'm:course-lessons:0');
+    expect(S().days['2026-11-12'].plan!.items.length).toBe(0);
+    actions.finish(false);
+    expect(S().logs.length).toBe(logs0);
+    const back = S().days['2026-11-12'].plan!.items;
+    expect(back.length).toBe(1);
+    expect(back[0].start).toBeGreaterThanOrEqual(605);
+    setNowOverride(null);
+  });
+});

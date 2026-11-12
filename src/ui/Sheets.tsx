@@ -59,6 +59,9 @@ function Add() {
   const [onSite, setOnSite] = useState(15);
   const [bike, setBike] = useState(true);
   const [evBike, setEvBike] = useState(false);
+  const [outdoor, setOutdoor] = useState(true);
+  const [onDay, setOnDay] = useState('');
+  const [cookAt, setCookAt] = useState('');
   const [after, setAfter] = useState('10:00');
   const [by, setBy] = useState('17:00');
   const [repeat, setRepeat] = useState<'once' | 'weekly' | 'some'>('once');
@@ -89,14 +92,14 @@ function Add() {
       const lo = fromHM(after), hi = fromHM(by);
       if (hi - lo < onSite + 2 * travel) return;
       actions.saveMission({ id: uid(), objectiveId: '', title: title.trim(), kind: 'work', energy: 'none', minutes: onSite, minLevel: 3,
-        unitsLeft: 1, unitsTotal: 1, maxBlockUnits: 1, errand: true, travel, bike, window: [lo, hi],
-        note: `${travel ? `${travel} min ${bike ? 'bike' : 'travel'} each way. ` : ''}Planned on an On Duty day or better, between ${fmtT(lo)} and ${fmtT(hi)}.` });
+        unitsLeft: 1, unitsTotal: 1, maxBlockUnits: 1, errand: true, travel, bike, window: [lo, hi], outdoor, ...(onDay ? { onDate: onDay, minLevel: 1 } : {}),
+        note: `${travel ? `${travel} min ${bike ? 'bike' : 'travel'} each way. ` : ''}${onDay ? 'Planned that day' : 'Planned on an On Duty day or better'}, between ${fmtT(lo)} and ${fmtT(hi)}${outdoor ? ', in daylight if it can' : ''}.` });
       toast('Errand added');
       close();
       return;
     }
     if (kind === 'cooking') {
-      actions.setDay(date, { cook: forFamily ? 'family' : true });
+      actions.setDay(date, { cook: forFamily ? 'family' : true, ...(cookAt ? { cookAt: fromHM(cookAt) } : {}) });
       toast(forFamily ? 'Cooking for the family added' : 'Cooking added');
       close();
       return;
@@ -122,7 +125,9 @@ function Add() {
             <label class="field">Not before<input type="time" value={after} onInput={(e) => setAfter(val(e))} /></label>
             <label class="field">Home by<input type="time" value={by} onInput={(e) => setBy(val(e))} /></label>
           </div>
-          <span class="soft" style="font-size:14px">It goes on the next On Duty day or better that has room, then it's gone.</span>
+          <label class="check"><input type="checkbox" checked={outdoor} onChange={(e) => setOutdoor((e.target as HTMLInputElement).checked)} />Outdoors (daylight if possible)</label>
+          <label class="field">On a specific day (optional)<input type="date" value={onDay} onInput={(e) => setOnDay(val(e))} /></label>
+          <span class="soft" style="font-size:14px">{onDay ? "It's planned that day, whatever your level." : "It goes on the next On Duty day or better that has room, then it's gone."}</span>
         </>
       ) : kind === 'cooking' ? (
         <>
@@ -131,7 +136,8 @@ function Add() {
             <button type="button" class={`small ${forFamily ? 'on' : ''}`} onClick={() => setForFamily(true)}>For the family</button>
             <button type="button" class={`small ${!forFamily ? 'on' : ''}`} onClick={() => setForFamily(false)}>Just me</button>
           </div>
-          <span class="soft" style="font-size:14px">It's planned to finish right at dinner time. Move dinner on that day's Dinner panel to shift both.</span>
+          <label class="field">Start cooking at (optional)<input type="time" value={cookAt} onInput={(e) => setCookAt(val(e))} /></label>
+          <span class="soft" style="font-size:14px">{cookAt ? 'Dinner follows right when cooking is done.' : "It's planned to finish right at dinner time. Move dinner on that day's Dinner panel to shift both."}</span>
         </>
       ) : kind === 'objective' ? (
         <>

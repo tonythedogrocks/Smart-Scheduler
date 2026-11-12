@@ -37,6 +37,8 @@ export interface Mission {
   travel?: number;         // minutes each way (walk or bike) added around the block
   bike?: boolean;          // that travel is by bike: counts toward weekly exercise
   daylight?: boolean;      // only between sunrise and sunset
+  outdoor?: boolean;       // outside: daylight preferred, night allowed
+  onDate?: string;         // must happen on this date (e.g. a pinned errand)
   mealGap?: number;        // minutes to wait after a meal (workouts), overriding the setting
   window?: [number, number]; // earliest start and latest finish, travel included (minutes from midnight)
   errand?: boolean;        // one-off errand: planned on good days, then gone
@@ -75,7 +77,7 @@ export interface Log {
   plannedMin: number; units: number; done: boolean; level?: Level; xp?: number; step?: number;
 }
 
-export interface DayRec { t?: number; level?: Level; setAt?: number; floorAwarded?: boolean; lunchAt?: number; dinnerAt?: number; starts?: Record<string, number>; cook?: boolean | 'family'; cookStart?: number; cookEnd?: number; morningEnd?: number; dinnerTap?: number;
+export interface DayRec { t?: number; level?: Level; setAt?: number; floorAwarded?: boolean; lunchAt?: number; dinnerAt?: number; starts?: Record<string, number>; cook?: boolean | 'family'; cookAt?: number; cookStart?: number; cookEnd?: number; morningEnd?: number; dinnerTap?: number;
   ate?: Partial<Record<'lunch' | 'dinner', { at: number; big?: boolean }>>;
   misses?: { m: string; at: number }[]; // planned blocks that passed without being started (start time, minutes) // confirmed meals: start (minutes from midnight), and whether it was a large one
 }
@@ -86,6 +88,7 @@ export interface Settings {
   dishesMin: number; mealGap: number; breakMin: number;
   bigMealGap: number;       // minutes to wait before a workout after a large meal
   baseline: number; capacity: Record<Level, number>;
+  aheadLevel?: number;      // level assumed for days not reported yet (default 4, Active)
   restDay: number | null;  // weekday kept for essentials only (0 = Sunday), or none
   restDayName: string;
   dishDays: number[];       // weekdays with dishes after lunch and dinner

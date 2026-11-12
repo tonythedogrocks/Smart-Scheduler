@@ -4,7 +4,7 @@ import { energyBetween, predictedCurve } from './energy';
 import { fixedBlocks, freeSlots, isRest, sunTimes, type Block } from './schedule';
 import { afterStats, weekdayFactor, capacityAt, choreDue, exerciseCeiling, exerciseMinWeek, factor, flareSpike, isExercise, partOf, predictLevel, workMinOn } from './learn';
 
-export interface Alloc { missionId: string; units: number; baseMin: number; min: number; habit?: boolean; clock?: boolean; deadline?: boolean }
+export interface Alloc { missionId: string; units: number; baseMin: number; min: number; habit?: boolean; clock?: boolean; deadline?: boolean; must?: boolean }
 export interface DayAlloc { date: string; level: number; rest: boolean; blocks: Alloc[]; capMin: number; deadlineMin: number; lock: boolean }
 /** Lock-in: deadlines need more than a comfortable day. Which one, roughly how much a day, until when. */
 export interface LockIn { objectiveId: string; title: string; perDay: number; until: string; today: number; comfort: number; late: string[] }
@@ -141,13 +141,23 @@ export function forecast(s: State, now: number): Forecast {
       freeMin -= min;
       if (t > 0 && m.everyDays) last.set(m.id, date);
     }
+    // things pinned to this date (e.g. a grocery run) are reserved first, whatever the level
+    for (const m of live) {
+      if (m.onDate !== date || m.kind !== 'work' || (units0.get(m.id) || 0) <= 0) continue;
+      const min = Math.round(unit(m)) + 2 * (m.travel || 0);
+      routines.push({ missionId: m.id, units: 1, baseMin: m.minutes, min, must: true });
+      freeMin -= min;
+    }
     let comfort = capacityAt(s, level, today, t === 0) * (t === 0 ? 1 : weekdayFactor(s, today, weekday(date)));
     if (t === 0) comfort -= workMinOn(s, date) + (run && byId.get(run.missionId)?.kind !== 'habit' ? run.plannedMin : 0);
     const avail = Math.max(0, freeMin);
     comfort = Math.max(0, Math.min(comfort, avail));
     const curve = predictedCurve(s, date, level, today);
     const span = slots.length ? energyBetween(curve, slots[0][0], slots[slots.length - 1][1]) : 0;
-    const weight = rest || avail <= 0 ? 0 : Math.max(comfort, avail * 0.25) * span;
+    // Deadline pacing weighs days not reported yet at the modest safety level (so today always carries its
+    // fair share); how a future day looks (its room, its timeline) still assumes the optimistic level.
+    const paceComfort = t === 0 || real ? comfort : Math.min(avail, capacityAt(s, s.settings.baseline, today) * weekdayFactor(s, today, weekday(date)));
+    const weight = rest || avail <= 0 ? 0 : Math.max(paceComfort, avail * 0.25) * span;
     infos.push({ date, rest, level, avail, comfort, weight, routines });
   }
 
@@ -305,6 +315,7 @@ export function forecast(s: State, now: number): Forecast {
         // flexible goals only: practice, errands, and work with no deadline
         if (m.kind === 'work' && o?.due && !m.errand) continue;
         if (m.notBefore && d.date < m.notBefore) continue;
+        if (m.onDate) continue;
         if (m.kind === 'work' && (m.after || []).some((a) => byId.get(a) && (sim.doneIdx.get(a) === undefined || sim.doneIdx.get(a)! > t))) continue;
         const spent = (usedMis.get(m.id) || 0) + doneTodayMin(m.id);
         let score: number, u = 1, min: number;
@@ -410,7 +421,8 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     items.push({ key: l.step !== undefined ? `c:${m.id}:${l.step}` : keyFor(m.id), start: minsOf(l.start), end: Math.max(minsOf(l.start) + 1, minsOf(l.end)), title: stepT || (m.kind === 'habit' ? habitTitle(m, l.level ?? level) : m.title), sub: `${Math.max(1, Math.round((l.end - l.start) / 60000))} min`, detail: m.note, kind: 'mission', missionId: m.id, done: true });
   }
   if (date < today) return items.sort((a, b) => a.start - b.start);
-  if (!isToday) return items.sort((a, b) => a.start - b.start);
+  const tIdx = diffDays(today, date);
+  if (!isToday && tIdx !== 1) return items.sort((a, b) => a.start - b.start); // today and tomorrow are planned in full
 
   let slots = freeSlots(fixed, round5(nowMin));
   /** First start at or after notBefore that fits, avoiding forbidden windows. Does not reserve it. */
@@ -431,7 +443,10 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     slots.splice(i, 1, ...rest);
   };
   const stepTitle = (m: Mission, i: number) => (m.steps && m.steps[i] ? m.steps[i].title : m.title);
-  const run = s.running;
+  const run = isToday ? s.running : undefined;
+  // tomorrow's named steps pick up after what today's plan covers
+  const preUnits = new Map<string, number>();
+  if (!isToday) for (const d of fc.days) { if (d.date >= date) break; for (const b of d.blocks) if (!b.habit) preUnits.set(b.missionId, (preUnits.get(b.missionId) || 0) + (byId.get(b.missionId)?.rotation?.length ? 1 : b.units)); }
   if (run) {
     const m = byId.get(run.missionId);
     if (m) {
@@ -445,6 +460,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   }
 
   if (run) usedUnits.set(run.missionId, run.units);
+  for (const [k2, v2] of preUnits) if (!usedUnits.has(k2)) usedUnits.set(k2, v2);
 
   // Chores with steps: every step needs you home, the time between steps is free.
   for (const m of s.missions) {
@@ -473,7 +489,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     });
   }
 
-  const day = fc.days[0];
+  const day = fc.days.find((d) => d.date === date)!;
   const gap = s.settings.mealGap;
   // Learned patterns, used only once they're confident.
   const avoid = new Map<string, Set<string>>();
@@ -488,14 +504,17 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   const curve = predictedCurve(s, date, level, today);
   const hardness = (a: Alloc) => { const m = byId.get(a.missionId); return a.habit || !m ? 0 : (a.deadline ? 3 : 1) + (m.energy === 'mental' ? 1 : 0) + (a.clock ? 0.5 : 0); };
   // routines first (into the dips) so the floor always fits; then hardest work into the best of what's left
-  const order = [...day.blocks].sort((a, b) => Number(!!b.habit) - Number(!!a.habit) || hardness(b) - hardness(a));
+  const order = [...day.blocks].sort((a, b) => Number(!!b.habit) - Number(!!a.habit) || Number(!!b.must) - Number(!!a.must) || hardness(b) - hardness(a));
+  const sun = s.settings.sun ? sunTimes(date, s.settings.sun.lat, s.settings.sun.lon) : null;
   /** Every start (5-min steps) that fits, scored by predicted energy; hard work takes the best, light work the dips. */
-  const pick = (len: number, lo: number, fb: [number, number][], hi: number, light: boolean): { i: number; a: number } | null => {
+  const pick = (len: number, lo: number, fb: [number, number][], hi: number, light: boolean, outdoor = false): { i: number; a: number } | null => {
     let best: { i: number; a: number; sc: number } | null = null;
     for (let i = 0; i < slots.length; i++) {
       for (let a = Math.max(slots[i][0], lo); a + len <= Math.min(slots[i][1], hi); a += 5) {
         if (fb.some(([f0, f1]) => a < f1 && f0 < a + len)) continue;
-        const e = energyBetween(curve, a, a + len), sc = light ? -e : e;
+        const e = energyBetween(curve, a, a + len);
+        // outside: daylight strongly preferred, night still allowed
+        const sc = (light ? -e : e) + (outdoor && sun && a >= sun[0] && a + len <= sun[1] ? 10 : 0);
         if (!best || sc > best.sc + 0.01) best = { i, a, sc };
       }
     }
@@ -516,9 +535,9 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     const soft: [number, number][] = [];
     if (bad) for (const it of items) { const c = catOf(it); if (c && bad.has(c)) soft.push([it.end, it.end + 45]); }
     let got: { i: number; a: number } | null = null;
-    const light = !!a.habit || m.energy === 'none';
+    const light = (!!a.habit || m.energy === 'none') && !a.must;
     for (const fb of soft.length ? [[...forbid, ...soft], forbid] : [forbid]) {
-      got = pick(a.min, lo, fb, hi, light);
+      got = pick(a.min, lo, fb, hi, light, !!m.outdoor);
       if (got) break;
     }
     const placeAt = (at: number, units: number, len: number) => {
@@ -551,7 +570,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   for (const id of usedUnits.keys()) {
     const m = byId.get(id);
     if (!m || !((m.kind === 'work' && m.labels?.length) || m.rotation?.length)) continue;
-    let skip = run?.missionId === id ? (m.rotation?.length ? 1 : run.units) : 0;
+    let skip = run?.missionId === id ? (m.rotation?.length ? 1 : run.units) : preUnits.get(id) || 0;
     for (const it of items.filter((x) => x.missionId === id && !x.done && !x.running && x.units).sort((x, y) => x.start - y.start)) {
       it.sub = label(m, it.min || 0, it.units!, skip);
       if (m.rotation?.length) it.detail = detailOf(s, m, skip);
@@ -559,7 +578,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     }
   }
   items.sort((a, b) => a.start - b.start || a.end - b.end);
-  const cur = items.find((i) => i.running) || items.find((i) => !i.done && !i.past && i.block?.kind !== 'note' && i.start <= nowMin + 5 && i.end > nowMin);
+  const cur = !isToday ? undefined : items.find((i) => i.running) || items.find((i) => !i.done && !i.past && i.block?.kind !== 'note' && i.start <= nowMin + 5 && i.end > nowMin);
   if (cur) cur.now = true;
   return items;
 }

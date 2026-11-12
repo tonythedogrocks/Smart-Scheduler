@@ -112,14 +112,9 @@ export function capacityAt(s: State, level: number, today: string, optimistic = 
 }
 
 /** Predicted level for a future day; never above the planning baseline. */
-export function predictLevel(s: State, date: string, today: string): number {
-  const recs = Object.entries(s.days).filter(([d, r]) => r.level && d < today);
-  let p = s.settings.baseline;
-  const same = recs.filter(([d]) => weekday(d) === weekday(date)).map(([, r]) => r.level!);
-  if (same.length >= 3) p = same.reduce((a, b) => a + b, 0) / same.length;
-  else if (recs.length >= 7) p = recs.reduce((a, [, r]) => a + r.level!, 0) / recs.length;
-  if (crashAfter5(s, today).confident && s.days[addDays(date, -1)]?.level === 5) p -= 1;
-  return clamp(Math.min(p, s.settings.baseline), 1, 5);
+/** Level assumed for a day not reported yet: Active (optimal), as he asked, until he reports in that day. */
+export function predictLevel(s: State, date: string, _today: string): number {
+  return s.days[date]?.level ?? s.settings.aheadLevel ?? 4;
 }
 
 export function crashAfter5(s: State, today: string) {

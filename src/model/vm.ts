@@ -43,12 +43,15 @@ function dayIssue(s: State, fc: Forecast, date: string, now: number): { issue: I
   const lv = s.days[date]?.level;
   let chapters: ChapterVM[];
   let sub: string;
-  if (isToday) {
+  const isTomorrow = diffDays(today, date) === 1;
+  if (isToday || isTomorrow) {
     chapters = CH.map((title) => ({ title, panels: [] as PanelVM[] }));
+    const pl = fc.days.find((d) => d.date === date)?.level ?? 3;
+    if (isTomorrow && !lv) chapters[0].panels.push({ key: 'draft', h: 'PLANNED AHEAD', t: `Planned at ${nice(levelName(Math.round(pl)))} (level ${Math.round(pl)})`, m: 'It re-plans when you report in tomorrow.', wide: true, act: 'info', fixed: true });
     if (isBackupDay(s, date)) chapters[0].panels.push({ key: 'backup', h: 'BACKUP', t: `Backup work day`, m: `This ${s.settings.restDayName} is planned like a normal day.`, wide: true, act: 'backup', date });
-    for (const it of items) if (it.block?.kind !== 'travel' || true) chapters[partOf(it.start % 1440 < 300 ? 1439 : it.start)].panels.push(itemPanel(s, it, date, true));
+    for (const it of items) chapters[partOf(it.start % 1440 < 300 ? 1439 : it.start)].panels.push(itemPanel(s, it, date, isToday));
     chapters.forEach((c) => { if (!c.panels.length) c.panels.push({ key: 'open', h: 'OPEN', t: 'Nothing queued', m: 'Rest counts too.', wide: true, act: 'info' }); });
-    sub = sab ? restName : lv ? `Level ${lv} · ${nice(levelName(lv))}` : 'Level not set yet';
+    sub = sab ? restName : lv ? `Level ${lv} · ${nice(levelName(lv))}` : isTomorrow ? 'Planned ahead' : 'Level not set yet';
   } else if (date < today) {
     const done = items.filter((i) => i.done && i.start > 0);
     const panels = done.map((i) => itemPanel(s, i, date, false));

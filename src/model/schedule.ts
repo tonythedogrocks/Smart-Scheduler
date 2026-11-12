@@ -118,7 +118,7 @@ export function fixedBlocks(s: State, date: string): Block[] {
   const fam = day.cook === 'family';
   const cookLen = cookMinutes(s, fam);
   if (day.cook) {
-    const cs = day.cookStart !== undefined ? minsOf(day.cookStart) : dinnerWant - cookLen;
+    const cs = day.cookStart !== undefined ? minsOf(day.cookStart) : day.cookAt ?? dinnerWant - cookLen;
     const ce = day.cookEnd !== undefined ? minsOf(day.cookEnd) : cs + cookLen;
     dinnerWant = ce;
     out.push({ key: 'f:cook', start: cs, end: ce, title: fam ? 'Cooking for the family' : 'Cooking dinner', sub: day.cookEnd ? `${Math.round(ce - cs)} min` : `about ${cookLen} min · dinner right after`, kind: 'routine', blocking: true });

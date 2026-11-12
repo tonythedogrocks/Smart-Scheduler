@@ -1,6 +1,6 @@
 import type { State, Mission } from './types';
 import { addDays, dateOf, diffDays, fmtDate, fmtDay, fmtDur, fmtT, minsOf, weekStart, weekday } from './time';
-import { describeUnits, rotationAt, forecast, layoutDay, nextLabels, orders, habitMin, habitTitle, habitsDue, type Forecast, type PlanItem } from './planner';
+import { describeUnits, rotationAt, forecast, layoutDay, nextLabels, orders, mustToday, habitMin, habitTitle, habitsDue, type Forecast, type PlanItem } from './planner';
 import { levelName, nice } from './seed';
 import { bodyFat, choreDue, choreInterval, choreLast, exerciseCeiling, factor, partOf } from './learn';
 import { eventsOn, isBackupDay, isRest } from './schedule';
@@ -8,7 +8,7 @@ import { eventsOn, isBackupDay, isRest } from './schedule';
 export interface PanelVM {
   key: string; h: string; t: string; m?: string; d?: string; wide?: boolean;
   time?: string; kick?: string; color?: string; fixed?: boolean; past?: boolean;
-  now?: boolean; done?: boolean; running?: boolean; alert?: boolean;
+  now?: boolean; done?: boolean; running?: boolean; alert?: boolean; must?: boolean;
   missionId?: string; units?: number; baseMin?: number; min?: number; step?: number;
   act?: 'mission' | 'meal' | 'cook' | 'morning' | 'backup' | 'choice' | 'event' | 'objective' | 'info';
   evtId?: string; date?: string; objectiveId?: string; meal?: 'lunch' | 'dinner'; editable?: boolean;
@@ -37,6 +37,14 @@ function itemPanel(s: State, it: PlanItem, date: string, isToday: boolean): Pane
   };
 }
 
+let mustMemo: { key: string; set: Set<string> } | null = null;
+/** Blocks today that a deadline depends on (recomputed only when the data or the day changes). */
+function mustSet(s: State, items: PlanItem[], today: string, now: number): Set<string> {
+  const key = JSON.stringify([today, s.updatedAt, items.filter((i) => i.kind === 'mission' && !i.done).map((i) => [i.key, i.units])]);
+  if (mustMemo?.key !== key) mustMemo = { key, set: mustToday(s, items, now) };
+  return mustMemo.set;
+}
+
 function dayIssue(s: State, fc: Forecast, date: string, now: number): { issue: IssueVM; items: PlanItem[] } {
   const today = fc.today, isToday = date === today, sab = isRest(s, date), restName = s.settings.restDayName;
   const items = layoutDay(s, fc, date, now);
@@ -49,7 +57,8 @@ function dayIssue(s: State, fc: Forecast, date: string, now: number): { issue: I
     const pl = fc.days.find((d) => d.date === date)?.level ?? 3;
     if (isTomorrow && !lv) chapters[0].panels.push({ key: 'draft', h: 'PLANNED AHEAD', t: `Planned at ${nice(levelName(Math.round(pl)))} (level ${Math.round(pl)})`, m: 'It re-plans when you report in tomorrow.', wide: true, act: 'info', fixed: true });
     if (isBackupDay(s, date)) chapters[0].panels.push({ key: 'backup', h: 'BACKUP', t: `Backup work day`, m: `This ${s.settings.restDayName} is planned like a normal day.`, wide: true, act: 'backup', date });
-    for (const it of items) chapters[partOf(it.start % 1440 < 300 ? 1439 : it.start)].panels.push(itemPanel(s, it, date, isToday));
+    const must = isToday ? mustSet(s, items, today, now) : new Set<string>();
+    for (const it of items) { const p = itemPanel(s, it, date, isToday); if (must.has(it.key)) p.must = true; chapters[partOf(it.start % 1440 < 300 ? 1439 : it.start)].panels.push(p); }
     chapters.forEach((c) => { if (!c.panels.length) c.panels.push({ key: 'open', h: 'OPEN', t: 'Nothing queued', m: 'Rest counts too.', wide: true, act: 'info' }); });
     sub = sab ? restName : lv ? `Level ${lv} · ${nice(levelName(lv))}` : isTomorrow ? 'Planned ahead' : 'Level not set yet';
   } else if (date < today) {

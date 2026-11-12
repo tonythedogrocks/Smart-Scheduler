@@ -671,3 +671,42 @@ export function orders(items: PlanItem[]) {
   const next = items.find((x, j) => j > i && !x.done && !x.past && x.kind === 'mission' && !x.now) || null;
   return { now, next };
 }
+
+/**
+ * Today's blocks a deadline actually depends on: if he skipped them today, that deadline would land late.
+ * For each task with deadline work today, finds the fewest of its units that must happen today
+ * (everything else planned today assumed done) and marks the earliest blocks covering them.
+ */
+export function mustToday(s: State, items: PlanItem[], now: number): Set<string> {
+  const out = new Set<string>();
+  const tomorrow = new Date(now); tomorrow.setHours(24, 0, 0, 0);
+  const groups = new Map<string, PlanItem[]>();
+  for (const it of items) {
+    if (it.kind !== 'mission' || it.done || it.running || !it.missionId || it.step !== undefined) continue;
+    const m = s.missions.find((x) => x.id === it.missionId);
+    const o = m && s.objectives.find((x) => x.id === m.objectiveId);
+    if (!m || m.kind !== 'work' || !o?.due || o.done) continue;
+    (groups.get(m.id) || groups.set(m.id, []).get(m.id)!).push(it);
+  }
+  const lateWith = (id: string, k: number) => {
+    const c: State = structuredClone(s);
+    c.updatedAt = -Math.random(); // its own forecast, not the cached one
+    for (const [gid, its] of groups) {
+      const cm = c.missions.find((x) => x.id === gid)!;
+      const u = gid === id ? k : its.reduce((a, i) => a + (i.units || 1), 0);
+      cm.unitsLeft = Math.max(0, (cm.unitsLeft || 0) - u);
+    }
+    const m = c.missions.find((x) => x.id === id)!, o = c.objectives.find((x) => x.id === m.objectiveId)!;
+    const land = forecast(c, tomorrow.getTime()).landing[o.id];
+    return land !== undefined && (land === null || land > o.due!);
+  };
+  for (const [id, its] of groups) {
+    const total = its.reduce((a, i) => a + (i.units || 1), 0);
+    if (!lateWith(id, 0)) continue;
+    let lo = 1, hi = total; // fewest units today that keep it on time (all of them if even that isn't enough)
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (lateWith(id, mid)) lo = mid + 1; else hi = mid; }
+    let got = 0;
+    for (const it of [...its].sort((a, b) => a.start - b.start)) { if (got >= lo) break; out.add(it.key); got += it.units || 1; }
+  }
+  return out;
+}

@@ -218,8 +218,8 @@ export function App() {
               {issue.chapters.flatMap((ch, ci) => ch.panels.map((p) => ({ p, ci }))).map(({ p, ci }) => (
                 <li class={`${p.now ? 'is-now' : ''} ${p.done ? 'is-done' : ''} ${p.past && !p.done && !p.now ? 'is-past' : ''}`}>
                   <span class="tl-time">{p.time || p.h}</span>
-                  <button type="button" class={`tl-card ${p.fixed ? 'fixed' : ''}`} style={p.color && !p.done && !p.now ? `border-left:10px solid ${p.color}` : ''} onClick={() => go({ view: 'panel', ch: ci, p: p.key })}>
-                    {p.kick && <span class="tl-kick">{p.kick}</span>}
+                  <button type="button" class={`tl-card ${p.fixed ? 'fixed' : ''} ${p.must && !p.done ? 'is-must' : ''}`} style={p.color && !p.done && !p.now ? `border-left:10px solid ${p.color}` : ''} onClick={() => go({ view: 'panel', ch: ci, p: p.key })}>
+                    {(p.kick || p.must) && <span class="tl-kick">{p.must && <span class="must">MUST</span>}{p.kick}</span>}
                     <span class="tl-t">{p.t}</span>
                     {p.m && <span class="tl-m">{p.m}</span>}
                     {(p.done || p.now || p.running) && <span class="tag" style={`color:${p.done ? '#1B7A44' : '#B3231A'};border-color:${p.done ? '#1B7A44' : '#B3231A'}`}>{p.done ? 'DONE' : p.running ? 'GOING' : 'NOW!'}</span>}

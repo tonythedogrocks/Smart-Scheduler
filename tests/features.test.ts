@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { sample } from './fixture';
-import { forecast, layoutDay, planSig } from '../src/model/planner';
+import { forecast, layoutDay, mustToday, planSig } from '../src/model/planner';
 import { eventsOn, inWeeks } from '../src/model/schedule';
 import { afterStats, choreDue, choreInterval, exerciseCeiling, learnedLevel } from '../src/model/learn';
 import { addDays } from '../src/model/time';
@@ -620,5 +620,23 @@ describe('late meals', () => {
     expect(lunch.start).toBeGreaterThanOrEqual(795);
     expect(lunch.start >= 870 || lunch.end <= 840).toBe(true);
     expect(st.days['2026-11-12'].plan!.sig).toBe(planSig(st, '2026-11-12'));
+  });
+});
+
+describe('must-do blocks', () => {
+  it('marks only the blocks a deadline needs today', () => {
+    const s = sample();
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
+    const now = at('2026-11-12T10:00');
+    const items = layoutDay(s, forecast(s, now), '2026-11-12', now);
+    // plenty of time: nothing is must-do
+    expect(mustToday(s, items, now).size).toBe(0);
+    // the exam is tomorrow with more left than tomorrow alone can hold: today's exam blocks are must-do
+    const ex = s.objectives.find((o) => o.id === 'exam')!; ex.due = '2026-11-13';
+    s.missions.find((m) => m.id === 'exam-steps')!.unitsLeft = 20; s.updatedAt = Math.random();
+    const items2 = layoutDay(s, forecast(s, now), '2026-11-12', now);
+    const must = mustToday(s, items2, now);
+    expect(must.size).toBeGreaterThan(0);
+    for (const k of must) expect(s.missions.find((m) => m.id === items2.find((i) => i.key === k)!.missionId)!.objectiveId).toBe('exam');
   });
 });

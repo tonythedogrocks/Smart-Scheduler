@@ -97,6 +97,8 @@ box-shadow:5px 5px 0 -3px #fff,5px 5px 0 0 var(--ink),10px 10px 0 -3px #fff,10px
 .tl-time{font-family:var(--display);font-size:16px;letter-spacing:.03em;padding-top:8px;line-height:1.1}
 .tl-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:100%;min-height:52px;padding:8px 12px;border:3px solid var(--ink);border-radius:2px;background:#fff;text-align:left;box-shadow:3px 3px 0 var(--ink)}
 .tl-card.fixed{background:var(--paper);box-shadow:none;border-style:dashed;min-height:44px}
+.tl-kick .must{display:inline-block;margin-right:6px;padding:1px 6px;background:var(--red,#D92B21);color:#fff;border:2px solid var(--ink);border-radius:4px;letter-spacing:.08em}
+.tl-card.is-must{box-shadow:4px 4px 0 var(--red,#D92B21)}
 .tl-kick{font-family:var(--display);font-size:13px;letter-spacing:.06em;color:var(--soft)}
 .tl-t{font-size:16px;line-height:1.2;overflow-wrap:anywhere;padding-right:56px}
 .tl-m{font-size:13px;line-height:1.25;color:var(--soft);overflow-wrap:anywhere}

@@ -526,23 +526,32 @@ describe('a fixed plan for today', () => {
   });
 });
 
-describe('stop here', () => {
-  it('moves the rest of the block to the next free gap today; stopping right away logs nothing', async () => {
+describe('continue later', () => {
+  const run = async (startHM: string, pauseHM: string, units: number, ticked: number) => {
     const { actions, S, adopt } = await import('../src/model/store');
     const { setNowOverride } = await import('../src/model/time');
-    setNowOverride('2026-11-12T10:00:00');
     const s = sample();
-    for (const o of s.objectives) if (o.due) o.due = '2027-03-01';
-    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00'), plan: { sig: 'x', items: [{ key: 'm:course-lessons:0', missionId: 'course-lessons', start: 600, end: 660, title: 'Course', units: 2, baseMin: 60, min: 60 }] } };
+    const m = s.missions.find((x) => x.id === 'course-lessons')!; m.minutes = 10; m.unitsLeft = 20; m.labels = Array.from({ length: 20 }, (_, i) => `Unit|lesson ${i + 1}`);
+    const [h, mi] = startHM.split(':').map(Number), st = h * 60 + mi;
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00'), plan: { sig: 'x', items: [{ key: 'k1', missionId: 'course-lessons', start: st, end: st + units * 10, title: 'Course', units, baseMin: units * 10, min: units * 10 }] } };
     adopt(s);
-    const logs0 = S().logs.length;
-    actions.start('course-lessons', 2, 60, undefined, 'm:course-lessons:0');
-    expect(S().days['2026-11-12'].plan!.items.length).toBe(0);
-    actions.finish(false);
-    expect(S().logs.length).toBe(logs0);
-    const back = S().days['2026-11-12'].plan!.items;
-    expect(back.length).toBe(1);
-    expect(back[0].start).toBeGreaterThanOrEqual(605);
+    setNowOverride(`2026-11-12T${startHM}:00`); actions.start('course-lessons', units, units * 10, undefined, 'k1');
+    if (ticked) actions.tick(ticked);
+    setNowOverride(`2026-11-12T${pauseHM}:00`); actions.finish(false);
     setNowOverride(null);
+    return S();
+  };
+  it('pausing a few minutes in keeps the block as planned, nothing logged', async () => {
+    const s = await run('11:00', '11:03', 4, 0);
+    const it = s.days['2026-11-12'].plan!.items[0];
+    expect([it.start, it.min, it.units]).toEqual([660, 40, 4]);
+    expect(s.logs.filter((l) => l.missionId === 'course-lessons').length).toBe(0);
+  });
+  it('pausing after 2 of 4 steps leaves the other 2 starting where he paused, 20 minutes left', async () => {
+    const s = await run('13:00', '13:21', 4, 2);
+    const it = s.days['2026-11-12'].plan!.items[0];
+    expect([it.start, it.min, it.units]).toEqual([800, 20, 2]);
+    expect(it.sub).toMatch(/lessons 3–4/);
+    expect(s.missions.find((x) => x.id === 'course-lessons')!.unitsLeft).toBe(18);
   });
 });

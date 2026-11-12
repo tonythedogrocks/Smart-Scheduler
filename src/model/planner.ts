@@ -519,8 +519,8 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   // Hardest work first, into the highest predicted energy; routines and light work go in the dips.
   const curve = predictedCurve(s, date, level, today);
   const hardness = (a: Alloc) => { const m = byId.get(a.missionId); return a.habit || !m ? 0 : (a.deadline ? 3 : 1) + (m.energy === 'mental' ? 1 : 0) + (a.clock ? 0.5 : 0); };
-  // routines first (into the dips) so the floor always fits; then hardest work into the best of what's left
-  const order = [...day.blocks].sort((a, b) => Number(!!b.habit) - Number(!!a.habit) || Number(!!b.must) - Number(!!a.must) || hardness(b) - hardness(a));
+  // anything pinned to today first (it can't move to another day), then routines (into the dips) so the floor fits; then hardest work into the best of what's left
+  const order = [...day.blocks].sort((a, b) => Number(!!b.must && !b.habit) - Number(!!a.must && !a.habit) || Number(!!b.habit) - Number(!!a.habit) || Number(!!b.must) - Number(!!a.must) || hardness(b) - hardness(a));
   const sun = s.settings.sun ? sunTimes(date, s.settings.sun.lat, s.settings.sun.lon) : null;
   /** Every start (5-min steps) that fits, scored by predicted energy; hard work takes the best, light work the dips. */
   const pick = (len: number, lo: number, fb: [number, number][], hi: number, light: boolean, outdoor = false): { i: number; a: number } | null => {

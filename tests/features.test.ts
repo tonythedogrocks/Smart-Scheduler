@@ -640,3 +640,19 @@ describe('must-do blocks', () => {
     for (const k of must) expect(s.missions.find((m) => m.id === items2.find((i) => i.key === k)!.missionId)!.objectiveId).toBe('exam');
   });
 });
+
+describe('late meals with no room', () => {
+  it('with no free hour left, lunch is now and the day re-plans around it (no overlap kept)', async () => {
+    const { actions, S, adopt } = await import('../src/model/store');
+    const { setNowOverride } = await import('../src/model/time');
+    const s = sample();
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00'), lunchMin: 60 };
+    const items = Array.from({ length: 20 }, (_, i) => ({ key: `k${i}`, missionId: 'course-lessons', start: 810 + i * 30 + 25, end: 810 + i * 30 + 55, title: 'X', units: 1, baseMin: 30, min: 30 }));
+    s.days['2026-11-12'].plan = { sig: planSig(s, '2026-11-12'), items };
+    adopt(s);
+    setNowOverride('2026-11-12T13:27:00'); actions.mealLate('lunch'); setNowOverride(null);
+    const d = S().days['2026-11-12'];
+    expect(d.lunchAt).toBe(810);
+    expect(d.plan!.sig).not.toBe(planSig(S(), '2026-11-12'));
+  });
+});

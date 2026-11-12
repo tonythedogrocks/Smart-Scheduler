@@ -206,10 +206,14 @@ export const actions = {
       // look for room as if the meal weren't on the clock yet
       const tmp = structuredClone(s), td = tmp.days[date];
       if (meal === 'lunch') { td.lunchAt = nm; td.lunchMin = 0; } else { td.dinnerAt = nm; td.dinnerMin = 0; }
-      const at = nextGap(tmp, date, nm, len) ?? nm;
+      const gap = nextGap(tmp, date, nm, len);
+      // a free stretch in the window: the meal moves there and the rest of the day stays put;
+      // none: the meal is now, and the rest of the day re-plans around it
+      const at = gap !== null && gap <= hi ? gap : nm;
       if (at > hi) return; // past the usual window: leave it
-      const kept = d.plan && d.plan.sig === planSig(s, date);
+      const kept = gap === at && d.plan && d.plan.sig === planSig(s, date);
       if (meal === 'lunch') d.lunchAt = at; else d.dinnerAt = at;
+      d.mealMoved = { ...(d.mealMoved || {}), [meal]: at };
       if (kept) d.plan!.sig = planSig(s, date);
     });
   },

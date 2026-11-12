@@ -81,7 +81,7 @@ export function App() {
     const late = lib.todayItems.find((i) => i.kind === 'mission' && !i.done && !i.running && i.missionId && i.start + GRACE <= nm);
     if (late) actions.recordMiss(late.missionId!, late.start);
     else {
-      const meal = lib.todayItems.find((i) => i.kind === 'fixed' && i.block?.kind === 'meal' && !i.block.ate && i.block.meal && i.start + GRACE <= nm);
+      const meal = lib.todayItems.find((i) => i.kind === 'fixed' && i.block?.kind === 'meal' && !i.block.ate && i.block.meal && i.start + (S().days[today]?.mealMoved?.[i.block.meal] === i.start ? 30 : GRACE) <= nm);
       if (meal) actions.mealLate(meal.block!.meal!);
     }
   });

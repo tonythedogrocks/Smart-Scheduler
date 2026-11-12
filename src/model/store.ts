@@ -2,7 +2,7 @@ import { get, set } from 'idb-keyval';
 import type { State, Level, Evt, Mission, Objective, Log, PlanSnap } from './types';
 import { seed, withDefaults } from './seed';
 import { dateOf, nowTs, uid } from './time';
-import { describeUnits, excusedHabits, habitsDue, nextLabels, GRACE } from './planner';
+import { describeUnits, excusedHabits, habitsDue, nextGap, nextLabels, GRACE } from './planner';
 import { factor } from './learn';
 import { unlock } from './game';
 import { stamp } from './merge';
@@ -101,7 +101,9 @@ export const actions = {
         const unit = m0 && m0.kind === 'work' ? m0.minutes * f0 : 0;
         const credited = m0?.kind === 'work' ? (m0.labels?.length ? Math.min(r.units, r.ticked || 0) : Math.min(r.units, Math.floor(elapsed / unit))) : 0;
         const restUnits = m0?.kind === 'work' ? r.units - credited : 1;
-        const restMin = m0?.kind === 'work' ? Math.round(restUnits * unit) : Math.max(0, Math.round(r.plannedMin * f0) - elapsed);
+        // without named steps, the time already spent on the unfinished part comes off what's left
+        const partial = m0?.kind === 'work' && !m0.labels?.length ? Math.max(0, elapsed - credited * unit) : 0;
+        const restMin = m0?.kind === 'work' ? Math.max(restUnits > 0 ? 5 : 0, Math.round(restUnits * unit - partial)) : Math.max(0, Math.round(r.plannedMin * f0) - elapsed);
         if (elapsed >= 5 || credited > 0) {
           s.logs.push({ id: uid(), missionId: r.missionId, date, start: r.startedAt, end, plannedMin: r.plannedMin, units: credited, done: false, level: s.days[date]?.level, xp: Math.round(Math.min((end - r.startedAt) / 60000, Math.max(r.plannedMin * 2, 10))), ...(r.step !== undefined ? { step: r.step } : {}) });
           if (credited > 0 && m0?.kind === 'work') { m0.unitsLeft = Math.max(0, (m0.unitsLeft || 0) - credited); if (m0.unitsLeft === 0) m0.doneAt = date; }
@@ -112,6 +114,20 @@ export const actions = {
           const start = Math.floor(nm / 5) * 5;
           const named = m0.kind === 'work' && m0.labels?.length ? describeUnits(nextLabels(m0, restUnits)) : '';
           pl.items.push({ key: `m:${m0.id}:p${end % 100000}`, missionId: m0.id, start, end: start + restMin, title: m0.title, sub: `${named ? named + ' · ' : ''}${restMin} min left`, detail: m0.note, units: restUnits, baseMin: m0.kind === 'work' ? restUnits * m0.minutes : r.plannedMin, min: restMin, ...(r.step !== undefined ? { step: r.step } : {}) });
+          const added = pl.items.find((x) => x.key === `m:${m0.id}:p${end % 100000}`)!;
+          // never more of it in the plan than is left to do (another device may have planned it again)
+          if (m0.kind === 'work' && r.step === undefined) {
+            let room = (m0.unitsLeft ?? 0) - restUnits;
+            const others = pl.items.filter((x) => x !== added && x.missionId === m0.id && x.step === undefined).sort((x, y) => x.start - y.start);
+            for (const o of others) { const u = o.units || 1; if (u <= room) room -= u; else pl.items.splice(pl.items.indexOf(o), 1); }
+          }
+          // whatever it now lands on moves to the next free time after it
+          const hit = pl.items.filter((x) => x !== added && x.start < added.end && added.start < x.end);
+          for (const h of hit) pl.items.splice(pl.items.indexOf(h), 1);
+          for (const h of hit.sort((x, y) => x.start - y.start)) {
+            const len = h.end - h.start, g = nextGap(s, date, added.end, len);
+            if (g !== null) pl.items.push({ ...h, start: g, end: g + len });
+          }
           pl.items.sort((a, b) => a.start - b.start);
         }
         afterChange(s, date);

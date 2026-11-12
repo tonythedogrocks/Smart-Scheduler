@@ -555,3 +555,27 @@ describe('continue later', () => {
     expect(s.missions.find((x) => x.id === 'course-lessons')!.unitsLeft).toBe(18);
   });
 });
+
+describe('continue later on a one-off task', () => {
+  it('keeps only what is left, drops a second copy, and moves what it lands on', async () => {
+    const { actions, S, adopt } = await import('../src/model/store');
+    const { setNowOverride } = await import('../src/model/time');
+    const s = sample();
+    const m = s.missions.find((x) => x.id === 'course-lessons')!; m.minutes = 60; m.unitsLeft = 1; m.labels = undefined;
+    const other = s.missions.find((x) => x.kind === 'work' && x.id !== 'course-lessons')!;
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00'), plan: { sig: 'x', items: [
+      { key: 'a', missionId: 'course-lessons', start: 660, end: 720, title: 'Task', units: 1, baseMin: 60, min: 60 },
+      { key: 'b', missionId: other.id, start: 690, end: 720, title: 'Other', units: 1, baseMin: 30, min: 30 },
+      { key: 'c', missionId: 'course-lessons', start: 900, end: 960, title: 'Task', units: 1, baseMin: 60, min: 60 },
+    ] } };
+    adopt(s);
+    setNowOverride('2026-11-12T11:00:00'); actions.start('course-lessons', 1, 60, undefined, 'a');
+    setNowOverride('2026-11-12T11:16:00'); actions.finish(false);
+    setNowOverride(null);
+    const items = S().days['2026-11-12'].plan!.items;
+    const task = items.filter((i) => i.missionId === 'course-lessons');
+    expect(task.map((i) => [i.start, i.min])).toEqual([[675, 45]]);
+    const o = items.find((i) => i.key === 'b')!;
+    expect(o.start).toBeGreaterThanOrEqual(720);
+  });
+});

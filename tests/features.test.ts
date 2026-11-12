@@ -423,3 +423,14 @@ describe('energy model', () => {
     expect(hab.some((i) => i.start < 12 * 60)).toBe(true);
   });
 });
+
+describe('meal gap for routines', () => {
+  it('a strength routine with its own meal gap waits after a large dinner', () => {
+    const s = sample();
+    const st = s.missions.find((m) => m.id === 'strength')!; st.mealGap = 60;
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T08:40'), ate: { dinner: { at: 1110, big: true } } };
+    const now = at('2026-11-12T19:05');
+    const it = layoutDay(s, forecast(s, now), '2026-11-12', now).find((i) => i.missionId === 'strength');
+    if (it) expect(it.start).toBeGreaterThanOrEqual(1140 + 120);
+  });
+});

@@ -504,7 +504,10 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   for (const a of order) {
     const m = byId.get(a.missionId); if (!m) continue;
     const gapM = m.mealGap ?? gap;
-    const forbid: [number, number][] = m.workout ? fixed.filter((b) => b.kind === 'meal').map((b) => [b.start, b.end + (b.big ? Math.max(gapM, s.settings.bigMealGap) : gapM)] as [number, number]) : [];
+    // workouts wait after meals; so does anything with its own meal gap (e.g. a strength routine), doubled after a large meal
+    const waits = m.workout || m.mealGap !== undefined;
+    const bigGap = m.workout ? Math.max(gapM, s.settings.bigMealGap) : gapM * 2;
+    const forbid: [number, number][] = waits ? fixed.filter((b) => b.kind === 'meal').map((b) => [b.start, b.end + (b.big ? bigGap : gapM)] as [number, number]) : [];
     // daylight-only (sunrise to sunset) and errand windows, travel included
     let lo = 0, hi = 1e9;
     if (m.daylight && s.settings.sun) { const [rise, set] = sunTimes(date, s.settings.sun.lat, s.settings.sun.lon); lo = Math.ceil(rise / 5) * 5; hi = Math.floor(set); }

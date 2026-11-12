@@ -141,7 +141,7 @@ export function forecast(s: State, now: number): Forecast {
       freeMin -= min;
       if (t > 0 && m.everyDays) last.set(m.id, date);
     }
-    // things pinned to this date (e.g. a grocery run) are reserved first, whatever the level
+    // things pinned to this date are reserved first, whatever the level
     for (const m of live) {
       if (m.onDate !== date || m.kind !== 'work' || (units0.get(m.id) || 0) <= 0) continue;
       const min = Math.round(unit(m)) + 2 * (m.travel || 0);

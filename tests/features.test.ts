@@ -452,8 +452,8 @@ describe('planning ahead', () => {
     const { sunTimes } = await import('../src/model/schedule');
     const s = sample(); s.settings.sun = { lat: 38.9, lon: -77.04 };
     s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
-    s.days['2026-11-13'] = { cook: 'family', cookAt: 1110 };
-    s.missions.push({ id: 'groc', objectiveId: '', title: 'Grocery run', kind: 'work', energy: 'none', minutes: 85, minLevel: 1, unitsLeft: 1, unitsTotal: 1, maxBlockUnits: 1, errand: true, outdoor: true, onDate: '2026-11-13', window: [540, 1110] });
+    s.days['2026-11-13'] = { cook: 'family', cookAt: 1080 };
+    s.missions.push({ id: 'groc', objectiveId: '', title: 'Errand', kind: 'work', energy: 'none', minutes: 70, minLevel: 1, unitsLeft: 1, unitsTotal: 1, maxBlockUnits: 1, errand: true, outdoor: true, onDate: '2026-11-13', window: [540, 1080] });
     const now = at('2026-11-12T10:00');
     const fc = forecast(s, now);
     expect(fc.days[1].level).toBe(4);
@@ -462,7 +462,7 @@ describe('planning ahead', () => {
     expect(g).toBeTruthy();
     const [rise, set] = sunTimes('2026-11-13', 38.9, -77.04);
     expect(g.start).toBeGreaterThanOrEqual(rise); expect(g.end).toBeLessThanOrEqual(set);
-    expect(items.find((i) => i.key === 'f:cook')!.start).toBe(1110);
+    expect(items.find((i) => i.key === 'f:cook')!.start).toBe(1080);
     expect(items.filter((i) => i.kind === 'mission').length).toBeGreaterThan(3);
     expect(items.some((i) => i.now)).toBe(false);
   });

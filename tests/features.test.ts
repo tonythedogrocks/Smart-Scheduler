@@ -434,3 +434,15 @@ describe('meal gap for routines', () => {
     if (it) expect(it.start).toBeGreaterThanOrEqual(1140 + 120);
   });
 });
+
+describe('floor', () => {
+  it('a routine the meal gap kept out does not count against the floor; one simply not done still does', async () => {
+    const { excusedHabits } = await import('../src/model/planner');
+    const s = sample();
+    const st = s.missions.find((m) => m.id === 'strength')!; st.mealGap = 60;
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T08:40'), ate: { dinner: { at: 1110, big: true } } };
+    const ex = excusedHabits(s, at('2026-11-12T20:25'));
+    expect(ex.has('strength')).toBe(true);
+    expect(ex.has('stretch')).toBe(false);
+  });
+});

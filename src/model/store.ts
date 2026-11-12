@@ -2,7 +2,7 @@ import { get, set } from 'idb-keyval';
 import type { State, Level, Evt, Mission, Objective, Log } from './types';
 import { seed, withDefaults } from './seed';
 import { dateOf, nowTs, uid } from './time';
-import { habitsDue } from './planner';
+import { excusedHabits, habitsDue } from './planner';
 import { unlock } from './game';
 import { stamp } from './merge';
 
@@ -60,7 +60,9 @@ function afterChange(s: State, date: string) {
   const d = (s.days[date] ||= {});
   if (d.level && !d.floorAwarded) {
     const due = habitsDue(s, date, d.level).filter((m) => !m.notFloor);
-    const ok = due.every((m) => s.logs.some((l) => l.missionId === m.id && l.date === date && l.done));
+    // a routine the app's own rules kept out today (e.g. a meal gap) doesn't count against the floor
+    const excused = date === today() ? excusedHabits(s, nowTs()) : new Set<string>();
+    const ok = due.every((m) => excused.has(m.id) || s.logs.some((l) => l.missionId === m.id && l.date === date && l.done));
     if (ok && (due.length > 0 || d.level === 1)) d.floorAwarded = true;
   }
   return unlock(s, date);
@@ -126,6 +128,14 @@ export const actions = {
       d.ate = cur;
       if (meal === 'dinner' && at !== null) d.dinnerTap = mins;
     });
+  },
+  /** Re-check today's floor (a routine can become excused later, e.g. after a meal); only writes if it's newly met. */
+  checkFloor() {
+    const d = S().days[today()];
+    if (!d?.level || d.floorAwarded) return;
+    const probe = structuredClone(S());
+    afterChange(probe, today());
+    if (probe.days[today()]?.floorAwarded) { let got: string[] = []; mutate((s) => { got = afterChange(s, today()); }); toast(got.length ? 'Achievement unlocked!' : "Today's floor is hit. Full mission success!"); }
   },
   /** A planned block passed without being started: log it as missed (feeds the energy model), then the day re-plans. */
   recordMiss(missionId: string, at: number) {

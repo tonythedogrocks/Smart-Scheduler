@@ -52,6 +52,7 @@ export function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+  useEffect(() => { if (!needStatus) actions.checkFloor(); });
   // Missed blocks: if the block that's up now sits unstarted past 10 minutes of grace, log it as missed and re-plan.
   const cur = !needStatus ? lib.todayItems.find((i) => i.now && i.kind === 'mission' && !i.running && !i.done) : undefined;
   useEffect(() => {

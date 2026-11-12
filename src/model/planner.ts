@@ -564,6 +564,20 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   return items;
 }
 
+/**
+ * Today's routines the app's own rules kept out: not placed although a free gap long enough
+ * exists (so a rule like a meal gap or daylight blocked it, not running out of day).
+ */
+export function excusedHabits(s: State, now: number): Set<string> {
+  const date = dateOf(now);
+  const fc = forecast(s, now);
+  const placed = new Set(layoutDay(s, fc, date, now).filter((i) => i.kind === 'mission').map((i) => i.missionId));
+  const slots = freeSlots(fixedBlocks(s, date), round5(minsOf(now)));
+  const out = new Set<string>();
+  for (const b of fc.days[0].blocks) if (b.habit && !placed.has(b.missionId) && slots.some(([a, c]) => c - a >= b.min)) out.add(b.missionId);
+  return out;
+}
+
 /** Orders: the single thing to do now, and what follows. */
 export function orders(items: PlanItem[]) {
   const i = items.findIndex((x) => x.now);

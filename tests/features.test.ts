@@ -368,3 +368,20 @@ describe('confirmed meals', () => {
     if (c2) expect(c2.start).toBeGreaterThanOrEqual(870 + 180);
   });
 });
+
+describe('gaps get used', () => {
+  it('splits a block that does not fit whole across the gaps left, instead of dropping it', () => {
+    const s = sample();
+    s.days['2026-11-12'] = { level: 5, morningEnd: at('2026-11-12T08:40') };
+    s.events.push({ id: 'x1', title: 'Busy', kind: 'event', date: '2026-11-12', start: 540, end: 1140, travel: 0 });
+    const now = at('2026-11-12T19:00');
+    const fc = forecast(s, now);
+    const big = fc.days[0].blocks.filter((b) => !b.habit).sort((a, b) => b.min - a.min)[0];
+    const items = layoutDay(s, fc, '2026-11-12', now).filter((i) => i.kind === 'mission' && !i.done);
+    const habits = new Set(['cards', 'stretch', 'strength', 'breathe', 'vocal']);
+    const work = items.filter((i) => !habits.has(i.missionId!));
+    expect(big).toBeTruthy();
+    expect(work.length).toBeGreaterThan(0);
+    for (const w of work) expect(w.end - w.start).toBeGreaterThanOrEqual(15);
+  });
+});

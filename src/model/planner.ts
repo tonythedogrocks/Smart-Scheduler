@@ -409,16 +409,31 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
       got ||= find(a.min, lo, fb, hi);
       if (got) break;
     }
-    if (!got) continue; // doesn't fit today: back to the pool, silently
-    const at = got.a;
-    carve(at, a.min);
-    if (!a.habit && a.min >= 45) {
-      // breathing room after a real block
-      slots = slots.map(([x, y]) => (x === at + a.min ? [x + s.settings.breakMin, y] : [x, y]) as [number, number]).filter(([x, y]) => y - x >= 5);
+    const placeAt = (at: number, units: number, len: number) => {
+      carve(at, len);
+      if (!a.habit && len >= 45) {
+        // breathing room after a real block
+        slots = slots.map(([x, y]) => (x === at + len ? [x + s.settings.breakMin, y] : [x, y]) as [number, number]).filter(([x, y]) => y - x >= 5);
+      }
+      const skip = usedUnits.get(m.id) || 0;
+      usedUnits.set(m.id, skip + units);
+      items.push({ key: keyFor(m.id), start: at, end: at + len, title: a.habit ? habitTitle(m, level) : m.title, sub: label(m, len, units, skip), detail: detailOf(s, m, skip), kind: 'mission', missionId: m.id, units, baseMin: Math.round(a.baseMin * units / Math.max(1, a.units)), min: len });
+    };
+    if (got) { placeAt(got.a, a.units, a.min); continue; }
+    // Doesn't fit whole: split goal work across the gaps that are left (pieces of 15 min or more), instead of dropping it.
+    if (m.kind !== 'work' || a.units < 2 || m.travel) continue; // the rest goes back to the pool, silently
+    const unitLen = a.min / a.units;
+    let left = a.units;
+    while (left > 0) {
+      let placed = false;
+      for (let u = left; u >= 1; u--) {
+        const len = Math.round(u * unitLen);
+        if (len < 15) break;
+        const g = find(len, lo, forbid, hi);
+        if (g) { placeAt(g.a, u, len); left -= u; placed = true; break; }
+      }
+      if (!placed) break;
     }
-    const skip = usedUnits.get(m.id) || 0;
-    usedUnits.set(m.id, skip + a.units);
-    items.push({ key: keyFor(m.id), start: at, end: at + a.min, title: a.habit ? habitTitle(m, level) : m.title, sub: label(m, a.min, a.units, skip), detail: detailOf(s, m, skip), kind: 'mission', missionId: m.id, units: a.units, baseMin: a.baseMin, min: a.min });
   }
   // Blocks can land out of planning order (best times, gaps), so name each mission's blocks in time order.
   for (const id of usedUnits.keys()) {

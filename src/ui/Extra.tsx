@@ -182,6 +182,8 @@ function SyncCard() {
         <>
           <p>Syncing with <b>{cfg.repo}</b>. {st.state === 'syncing' ? 'Syncing now...' : st.state === 'error' ? '' : t ? `Last synced ${fmtT(t.getHours() * 60 + t.getMinutes())}.` : ''}</p>
           {st.state === 'error' && <div class="warn" role="alert">{st.error}</div>}
+          <label class="field">New token (if you made a new one)<input type="password" value={token} onInput={(e) => setToken((e.target as HTMLInputElement).value)} placeholder="github_pat_..." autocomplete="off" /></label>
+          {token.length >= 20 && <button type="button" class="small on" style="align-self:flex-start" onClick={() => { setCfg({ repo: cfg.repo, token }); setToken(''); syncNow(); }}>Save new token</button>}
           <div class="row">
             <button type="button" class="small on" onClick={() => syncNow()}>Sync now</button>
             <button type="button" class="small" onClick={() => { if (confirm('Stop syncing on this device? Your data stays here and in the repo.')) { setCfg(null); setToken(''); } }}>Disconnect</button>

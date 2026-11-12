@@ -137,7 +137,8 @@ export function learnedLevel(s: State, date: string, today: string): number {
 
 /** Level assumed for a day not reported yet: Active (optimal), as he asked, until he reports in that day. */
 export function predictLevel(s: State, date: string, _today: string): number {
-  return s.days[date]?.level ?? s.settings.aheadLevel ?? 4;
+  // a day not reported yet is planned at the level it's predicted to be (that weekday's pattern, else recent days)
+  return s.days[date]?.level ?? Math.min(5, Math.max(1, Math.round(learnedLevel(s, date, _today))));
 }
 
 export function crashAfter5(s: State, today: string) {

@@ -89,7 +89,7 @@ export interface Settings {
   dishesMin: number; mealGap: number; breakMin: number;
   bigMealGap: number;       // minutes to wait before a workout after a large meal
   baseline: number; capacity: Record<Level, number>;
-  aheadLevel?: number;      // level assumed for days not reported yet (default 4, Active)
+  aheadLevel?: number;      // no longer used: unreported days use the predicted level (kept so older data loads)
   restDay: number | null;  // weekday kept for essentials only (0 = Sunday), or none
   restDayName: string;
   dishDays: number[];       // weekdays with dishes after lunch and dinner

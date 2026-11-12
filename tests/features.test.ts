@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { sample } from './fixture';
 import { forecast, layoutDay, planSig } from '../src/model/planner';
 import { eventsOn, inWeeks } from '../src/model/schedule';
-import { afterStats, choreDue, choreInterval, exerciseCeiling } from '../src/model/learn';
+import { afterStats, choreDue, choreInterval, exerciseCeiling, learnedLevel } from '../src/model/learn';
 import { addDays } from '../src/model/time';
 import type { Log, State } from '../src/model/types';
 
@@ -448,7 +448,7 @@ describe('floor', () => {
 });
 
 describe('planning ahead', () => {
-  it('tomorrow is planned in full, at Active until reported, with a pinned errand in daylight', async () => {
+  it('tomorrow is planned in full, at its predicted level until reported, with a pinned errand in daylight', async () => {
     const { sunTimes } = await import('../src/model/schedule');
     const s = sample(); s.settings.sun = { lat: 38.9, lon: -77.04 };
     s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
@@ -456,7 +456,7 @@ describe('planning ahead', () => {
     s.missions.push({ id: 'groc', objectiveId: '', title: 'Errand', kind: 'work', energy: 'none', minutes: 70, minLevel: 1, unitsLeft: 1, unitsTotal: 1, maxBlockUnits: 1, errand: true, outdoor: true, onDate: '2026-11-13', window: [540, 1080] });
     const now = at('2026-11-12T10:00');
     const fc = forecast(s, now);
-    expect(fc.days[1].level).toBe(4);
+    expect(fc.days[1].level).toBe(Math.min(5, Math.max(1, Math.round(learnedLevel(s, '2026-11-13', '2026-11-12')))));
     const items = layoutDay(s, fc, '2026-11-13', now);
     const g = items.find((i) => i.missionId === 'groc')!;
     expect(g).toBeTruthy();

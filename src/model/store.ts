@@ -141,6 +141,8 @@ export const actions = {
       // ran past the start of what was next: re-plan the rest (not a miss, he was working)
       const pl = s.days[date]?.plan, nm = new Date(end).getHours() * 60 + new Date(end).getMinutes();
       if (pl && pl.items.some((x) => x.start + GRACE <= nm)) delete s.days[date].plan;
+      // on a Plus Ultra day (5), finishing early re-plans so the freed time gets filled
+      else if (pl && done && s.days[date]?.level === 5 && pl.items.some((x) => x.start > nm + GRACE)) delete s.days[date].plan;
       const m = s.missions.find((x) => x.id === r.missionId);
       if (doneUnits > 0 && m?.kind === 'work') {
         m.unitsLeft = Math.max(0, (m.unitsLeft || 0) - doneUnits);

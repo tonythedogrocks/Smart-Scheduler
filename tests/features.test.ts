@@ -674,3 +674,18 @@ describe('meal start and end', () => {
     expect([lunch.start, lunch.end]).toEqual([750, 800]);
   });
 });
+
+describe('finishing early', () => {
+  for (const [lv, kept] of [[4, true], [5, false]] as const) it(`level ${lv}: plan ${kept ? 'stays' : 're-plans'}`, async () => {
+    const { actions, S, adopt } = await import('../src/model/store');
+    const { setNowOverride } = await import('../src/model/time');
+    const s = sample();
+    s.days['2026-11-12'] = { level: lv, morningEnd: at('2026-11-12T09:00'), plan: { sig: 'x', items: [
+      { key: 'a', missionId: 'course-lessons', start: 600, end: 660, title: 'A', units: 2, baseMin: 60, min: 60 },
+      { key: 'b', missionId: 'course-paper', start: 680, end: 710, title: 'B', units: 1, baseMin: 30, min: 30 }] } };
+    adopt(s);
+    setNowOverride('2026-11-12T10:00:00'); actions.start('course-lessons', 2, 60, undefined, 'a');
+    setNowOverride('2026-11-12T10:30:00'); actions.finish(true); setNowOverride(null);
+    expect(!!S().days['2026-11-12'].plan).toBe(kept);
+  });
+});

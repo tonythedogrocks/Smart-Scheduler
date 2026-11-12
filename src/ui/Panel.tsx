@@ -52,7 +52,7 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
         {p.act === 'mission' && mission?.form === 'measure' && !p.done && !flash && <Measure />}
         {p.act === 'mission' && mission?.form !== 'measure' && !success && !mine && (
           <>
-            <button type="button" class="big go" disabled={!!run} onClick={() => actions.start(p.missionId!, p.units || 1, p.baseMin || mission?.minutes || 10, p.step)}>
+            <button type="button" class="big go" disabled={!!run} onClick={() => actions.start(p.missionId!, p.units || 1, p.baseMin || mission?.minutes || 10, p.step, p.key)}>
               <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z" /></svg>
               <span>START!</span>
             </button>

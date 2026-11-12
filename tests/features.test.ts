@@ -491,3 +491,37 @@ describe('predicted levels drive pacing', () => {
     expect(share(s)).toBeLessThanOrEqual(share(low));
   });
 });
+
+describe('a fixed plan for today', () => {
+  const setup = () => {
+    const s = sample();
+    for (const o of s.objectives) if (o.due) o.due = '2027-03-01';
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
+    return s;
+  };
+  const snap = async (s: State, now: number) => {
+    const { planSig } = await import('../src/model/planner');
+    const items = layoutDay(s, forecast(s, now), '2026-11-12', now).filter((i) => i.kind === 'mission' && !i.done && !i.running)
+      .map((i) => ({ key: i.key, missionId: i.missionId!, start: i.start, end: i.end, title: i.title, sub: i.sub, units: i.units, baseMin: i.baseMin, min: i.min }));
+    s.days['2026-11-12'].plan = { sig: planSig(s, '2026-11-12'), items }; s.updatedAt = Math.random();
+    return items;
+  };
+  it('starting a few minutes late keeps the day exactly as planned, and the late block is still the current one', async () => {
+    const s = setup();
+    const planned = await snap(s, at('2026-11-12T09:00'));
+    const now = at('2026-11-12T09:01') + planned[0].start * 60000 - 9 * 3600000;
+    const later = layoutDay(s, forecast(s, now), '2026-11-12', now).filter((i) => i.kind === 'mission');
+    expect(later.map((i) => [i.key, i.start])).toEqual(planned.map((i) => [i.key, i.start]));
+    expect(later[0].now).toBe(true);
+  });
+  it('a miss (past the 5-minute window) rebuilds the rest of the day from now', async () => {
+    const { GRACE } = await import('../src/model/planner');
+    const s = setup();
+    const planned = await snap(s, at('2026-11-12T09:00'));
+    const missedAt = planned[0].start;
+    s.days['2026-11-12'].misses = [{ m: planned[0].missionId, at: missedAt }]; s.updatedAt = Math.random();
+    const nowMin = missedAt + GRACE + 1, now = at('2026-11-12T00:00') + nowMin * 60000;
+    const items = layoutDay(s, forecast(s, now), '2026-11-12', now).filter((i) => i.kind === 'mission' && !i.done);
+    expect(items.every((i) => i.start >= nowMin - 1)).toBe(true);
+  });
+});

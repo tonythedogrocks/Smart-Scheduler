@@ -1,8 +1,8 @@
 import { get, set } from 'idb-keyval';
-import type { State, Level, Evt, Mission, Objective, Log } from './types';
+import type { State, Level, Evt, Mission, Objective, Log, PlanSnap } from './types';
 import { seed, withDefaults } from './seed';
 import { dateOf, nowTs, uid } from './time';
-import { excusedHabits, habitsDue } from './planner';
+import { excusedHabits, habitsDue, GRACE } from './planner';
 import { unlock } from './game';
 import { stamp } from './merge';
 
@@ -73,8 +73,14 @@ export const actions = {
     mutate((s) => { const d = (s.days[today()] ||= {}); d.level = level; /* first report of the day = start of the day */ if (!d.setAt || dateOf(d.setAt) !== today()) d.setAt = nowTs(); });
     setLocal({ status: false });
   },
-  start(missionId: string, units: number, plannedMin: number, step?: number) {
-    mutate((s) => { if (!s.running) s.running = { missionId, units, plannedMin, startedAt: nowTs(), ...(step !== undefined ? { step } : {}) }; });
+  start(missionId: string, units: number, plannedMin: number, step?: number, key?: string) {
+    mutate((s) => {
+      if (s.running) return;
+      s.running = { missionId, units, plannedMin, startedAt: nowTs(), ...(step !== undefined ? { step } : {}) };
+      // the planned block this replaces leaves today's fixed plan; everything else stays put
+      const pl = s.days[today()]?.plan;
+      if (pl) { const i = pl.items.findIndex((x) => (key ? x.key === key : x.missionId === missionId)); if (i >= 0) pl.items.splice(i, 1); }
+    });
   },
   /** done=false: stop here. Time still counts; the work quietly goes back to the pool. */
   /** Tick off steps of the running block in order (count = how many units are done so far). */
@@ -89,6 +95,9 @@ export const actions = {
       const log: Log = { id: uid(), missionId: r.missionId, date, start: r.startedAt, end, plannedMin: r.plannedMin, units: doneUnits, done, level: s.days[date]?.level, xp: Math.round(Math.min((end - r.startedAt) / 60000, Math.max(r.plannedMin * 2, 10))), ...(r.step !== undefined ? { step: r.step } : {}) };
       s.logs.push(log);
       s.running = undefined;
+      // ran past the start of what was next: re-plan the rest (not a miss, he was working)
+      const pl = s.days[date]?.plan, nm = new Date(end).getHours() * 60 + new Date(end).getMinutes();
+      if (pl && pl.items.some((x) => x.start + GRACE <= nm)) delete s.days[date].plan;
       const m = s.missions.find((x) => x.id === r.missionId);
       if (doneUnits > 0 && m?.kind === 'work') {
         m.unitsLeft = Math.max(0, (m.unitsLeft || 0) - doneUnits);
@@ -136,6 +145,10 @@ export const actions = {
     const probe = structuredClone(S());
     afterChange(probe, today());
     if (probe.days[today()]?.floorAwarded) { let got: string[] = []; mutate((s) => { got = afterChange(s, today()); }); toast(got.length ? 'Achievement unlocked!' : "Today's floor is hit. Full mission success!"); }
+  },
+  /** Fix today's plan once the day has started (or after a change rebuilt it). */
+  savePlan(sig: string, items: PlanSnap[]) {
+    mutate((s) => { const d = (s.days[today()] ||= {}); d.plan = { sig, items }; });
   },
   /** A planned block passed without being started: log it as missed (feeds the energy model), then the day re-plans. */
   recordMiss(missionId: string, at: number) {

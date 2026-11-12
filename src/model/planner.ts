@@ -1,7 +1,7 @@
 import type { State, Mission, Level, Objective } from './types';
 import { addDays, dateOf, diffDays, minsOf, weekStart, weekday } from './time';
 import { energyBetween, predictedCurve } from './energy';
-import { fixedBlocks, freeSlots, isRest, sunTimes, type Block } from './schedule';
+import { eventsOn, fixedBlocks, freeSlots, isRest, sunTimes, type Block } from './schedule';
 import { afterStats, weekdayFactor, learnedLevel, capacityAt, choreDue, exerciseCeiling, exerciseMinWeek, factor, flareSpike, isExercise, partOf, predictLevel, workMinOn } from './learn';
 
 export interface Alloc { missionId: string; units: number; baseMin: number; min: number; habit?: boolean; clock?: boolean; deadline?: boolean; must?: boolean }
@@ -388,6 +388,20 @@ export function rotationAt(s: State, m: Mission, skip = 0) {
 }
 const detailOf = (s: State, m: Mission, skip = 0) => (m.rotation?.length ? [rotationAt(s, m, skip).detail, m.note].filter(Boolean).join('\n\n') : m.note);
 
+/** Minutes of grace before an unstarted block counts as missed. */
+export const GRACE = 5;
+
+/**
+ * What today's fixed plan depends on. If any of it changes (level, commitments, meals, cooking,
+ * a miss, the morning routine finishing, missions added or retired), the plan is rebuilt. Starting,
+ * finishing or stopping a block does not change it, so the rest of the day stays put.
+ */
+export function planSig(s: State, date: string): string {
+  const d = s.days[date] || {};
+  return JSON.stringify([d.level, d.morningEnd ? 1 : 0, eventsOn(s, date).map((e) => [e.id, e.start, e.end, e.travel]), d.ate, d.cook, d.cookAt, d.cookStart ? 1 : 0, d.cookEnd ? 1 : 0, d.dinnerAt, d.lunchAt, d.starts, (d.misses || []).length,
+    s.missions.filter((m) => !m.archived).map((m) => m.id).join(','), s.settingsT || 0]);
+}
+
 /** Lay a day's allocation onto the clock. Today is laid from "now"; nothing is ever overdue. */
 export function layoutDay(s: State, fc: Forecast, date: string, now: number): PlanItem[] {
   const today = fc.today;
@@ -580,7 +594,18 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     }
   }
   items.sort((a, b) => a.start - b.start || a.end - b.end);
-  const cur = !isToday ? undefined : items.find((i) => i.running) || items.find((i) => !i.done && !i.past && i.block?.kind !== 'note' && i.start <= nowMin + 5 && i.end > nowMin);
+  // Once the day has started, keep today's plan as it was fixed: only what changed since (done, running) differs.
+  const stored = isToday && !morningOpen ? s.days[date]?.plan : undefined;
+  if (stored && stored.sig === planSig(s, date)) {
+    const keep = items.filter((i) => i.kind !== 'mission' || i.done || i.running);
+    const have = new Set(keep.filter((i) => i.kind === 'mission').map((i) => i.key));
+    for (const p of stored.items) if (!have.has(p.key)) keep.push({ ...p, kind: 'mission' });
+    items.length = 0; items.push(...keep);
+    items.sort((a, b) => a.start - b.start || a.end - b.end);
+  }
+  const cur = !isToday ? undefined : items.find((i) => i.running)
+    || items.find((i) => !i.done && !i.past && i.block?.kind !== 'note' && i.start <= nowMin + 5 && i.end > nowMin)
+    || items.find((i) => i.kind === 'mission' && !i.done && !i.running && i.start <= nowMin && nowMin < i.start + GRACE); // a little late: still this one
   if (cur) cur.now = true;
   return items;
 }

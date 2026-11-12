@@ -1,6 +1,8 @@
 import { useEffect } from 'preact/hooks';
 import { S, L, actions, go, setLocal, type Nav } from '../model/store';
 import { buildLibrary, type PanelVM } from '../model/vm';
+import { GRACE, planSig } from '../model/planner';
+import type { PlanSnap } from '../model/types';
 import { addDays, dateOf, fmtDate, fmtDay, fmtDur, nowTs, diffDays } from '../model/time';
 import { levelName } from '../model/seed';
 import { heroLevel, xpOf } from '../model/game';
@@ -53,20 +55,23 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
   useEffect(() => { if (!needStatus) actions.checkFloor(); });
-  // Missed blocks: if the block that's up now sits unstarted past 10 minutes of grace, log it as missed and re-plan.
-  const cur = !needStatus ? lib.todayItems.find((i) => i.now && i.kind === 'mission' && !i.running && !i.done) : undefined;
+  // Today's plan is fixed once the day has started; save it whenever it was (re)built.
   useEffect(() => {
-    if (!cur?.missionId || S().running || document.visibilityState !== 'visible') return;
-    let w: { date: string; key: string; since: number } | null = null;
-    try { w = JSON.parse(localStorage.getItem('lb-watch') || 'null'); } catch {}
-    const t = nowTs();
-    if (!w || w.date !== today || w.key !== cur.key || t - w.since > 3 * 3600000) w = { date: today, key: cur.key, since: t };
-    else if (t - w.since >= 10 * 60000) {
-      const d = new Date(w.since);
-      actions.recordMiss(cur.missionId, d.getHours() * 60 + d.getMinutes());
-      w = { date: today, key: cur.key, since: t };
-    }
-    try { localStorage.setItem('lb-watch', JSON.stringify(w)); } catch {}
+    if (needStatus) return;
+    const d = S().days[today];
+    if (!d?.level || !d.morningEnd || dateOf(d.morningEnd) !== today) return;
+    const sig = planSig(S(), today);
+    if (d.plan?.sig === sig) return;
+    const items: PlanSnap[] = lib.todayItems.filter((i) => i.kind === 'mission' && !i.done && !i.running && i.missionId)
+      .map((i) => ({ key: i.key, missionId: i.missionId!, start: i.start, end: i.end, title: i.title, sub: i.sub, detail: i.detail, units: i.units, baseMin: i.baseMin, min: i.min, step: i.step }));
+    actions.savePlan(sig, items);
+  });
+  // Missed: a planned block still unstarted 5 minutes after its time. Log it (feeds the energy model) and the day re-plans.
+  useEffect(() => {
+    if (needStatus || S().running || document.visibilityState !== 'visible') return;
+    const t = new Date(nowTs()), nm = t.getHours() * 60 + t.getMinutes();
+    const late = lib.todayItems.find((i) => i.kind === 'mission' && !i.done && !i.running && i.missionId && i.start + GRACE <= nm);
+    if (late) actions.recordMiss(late.missionId!, late.start);
   });
   useEffect(() => { if (l.toast) { const t = setTimeout(() => setLocal({ toast: undefined }), 2600); return () => clearTimeout(t); } }, [l.toast?.id]);
 

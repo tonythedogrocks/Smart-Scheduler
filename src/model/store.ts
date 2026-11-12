@@ -21,7 +21,8 @@ export const L = () => local;
 let saveT: any;
 function persist() {
   clearTimeout(saveT);
-  saveT = setTimeout(() => { set(KEY, state).catch(() => {}); }, 50);
+  // no browser storage (e.g. tests): skip quietly
+  saveT = setTimeout(() => { try { if (typeof indexedDB !== 'undefined') set(KEY, state).catch(() => {}); } catch { /* ignore */ } }, 50);
 }
 export function mutate(fn: (s: State) => void) {
   const next: State = structuredClone(state);

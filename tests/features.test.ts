@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { sample } from './fixture';
-import { forecast, layoutDay } from '../src/model/planner';
+import { forecast, layoutDay, planSig } from '../src/model/planner';
 import { eventsOn, inWeeks } from '../src/model/schedule';
 import { afterStats, choreDue, choreInterval, exerciseCeiling } from '../src/model/learn';
 import { addDays } from '../src/model/time';
@@ -591,5 +591,17 @@ describe('biking errands wait after meals', () => {
     const lunch = layoutDay(s, forecast(s, now), '2026-11-12', now).find((i) => i.block?.kind === 'meal' && i.start >= 700 && i.start < 800)!;
     expect(items.length).toBe(1);
     expect(items[0].start >= lunch.end + 60 || items[0].end <= lunch.start).toBe(true);
+  });
+});
+
+describe('editing a task re-plans today', () => {
+  it('changing how a task is set up changes the plan signature; doing work does not', () => {
+    const s = sample();
+    const m = s.missions.find((x) => x.id === 'course-lessons')!;
+    const a = planSig(s, '2026-11-12');
+    m.unitsLeft = (m.unitsLeft || 0) - 1; m.t = 123;
+    expect(planSig(s, '2026-11-12')).toBe(a);
+    m.travel = 15;
+    expect(planSig(s, '2026-11-12')).not.toBe(a);
   });
 });

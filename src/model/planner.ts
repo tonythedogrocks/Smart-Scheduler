@@ -396,10 +396,19 @@ export const GRACE = 5;
  * a miss, the morning routine finishing, missions added or retired), the plan is rebuilt. Starting,
  * finishing or stopping a block does not change it, so the rest of the day stays put.
  */
+/** Short fingerprint of how every task is set up (length, travel, meal gaps, windows...), leaving out
+ * what doing the work changes (units left, finished date), so editing a task re-plans but working doesn't. */
+function missionsHash(s: State): string {
+  const txt = JSON.stringify(s.missions.filter((m) => !m.archived).map(({ unitsLeft, doneAt, t, ...rest }) => rest));
+  let h = 0;
+  for (let i = 0; i < txt.length; i++) h = (h * 31 + txt.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
 export function planSig(s: State, date: string): string {
   const d = s.days[date] || {};
   return JSON.stringify([d.level, d.morningEnd ? 1 : 0, eventsOn(s, date).map((e) => [e.id, e.start, e.end, e.travel]), d.ate, d.cook, d.cookAt, d.cookStart ? 1 : 0, d.cookEnd ? 1 : 0, d.dinnerAt, d.lunchAt, d.lunchMin, d.dinnerMin, d.starts, (d.misses || []).length,
-    s.missions.filter((m) => !m.archived).map((m) => m.id).join(','), s.settingsT || 0]);
+    s.missions.filter((m) => !m.archived).map((m) => m.id).join(','), s.settingsT || 0, missionsHash(s)]);
 }
 
 /** Lay a day's allocation onto the clock. Today is laid from "now"; nothing is ever overdue. */

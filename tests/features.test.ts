@@ -580,19 +580,3 @@ describe('continue later on a one-off task', () => {
   });
 });
 
-describe('errands', () => {
-  it('one tap marks an errand done whole, no timer', async () => {
-    const { actions, S, adopt } = await import('../src/model/store');
-    const { setNowOverride } = await import('../src/model/time');
-    const s = sample();
-    const m = s.missions.find((x) => x.id === 'course-lessons')!; m.minutes = 60; m.unitsLeft = 1; m.errand = true; m.labels = undefined;
-    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
-    adopt(s);
-    setNowOverride('2026-11-12T12:00:00'); actions.doneNow('course-lessons', 1, 60);
-    setNowOverride(null);
-    const l = S().logs.filter((x) => x.missionId === 'course-lessons');
-    expect(l.length).toBe(1); expect(l[0].done).toBe(true);
-    expect(S().running).toBeUndefined();
-    expect(S().missions.find((x) => x.id === 'course-lessons')!.unitsLeft).toBe(0);
-  });
-});

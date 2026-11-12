@@ -52,17 +52,10 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
         {p.act === 'mission' && mission?.form === 'measure' && !p.done && !flash && <Measure />}
         {p.act === 'mission' && mission?.form !== 'measure' && !success && !mine && (
           <>
-            {mission?.errand ? (
-              <button type="button" class="big fin" disabled={!!run} onClick={() => { actions.doneNow(p.missionId!, p.units || 1, p.baseMin || mission.minutes, p.key); setFlash(true); }}>
-                <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
-                <span>DONE!</span>
-              </button>
-            ) : (
-              <button type="button" class="big go" disabled={!!run} onClick={() => actions.start(p.missionId!, p.units || 1, p.baseMin || mission?.minutes || 10, p.step, p.key)}>
-                <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z" /></svg>
-                <span>START!</span>
-              </button>
-            )}
+            <button type="button" class="big go" disabled={!!run} onClick={() => actions.start(p.missionId!, p.units || 1, p.baseMin || mission?.minutes || 10, p.step, p.key)}>
+              <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z" /></svg>
+              <span>START!</span>
+            </button>
             {run && <span class="soft" style="font-size:14px;text-align:center">Another {sab ? 'task' : 'mission'} is in progress. Finish or stop it first.</span>}
           </>
         )}

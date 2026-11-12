@@ -153,13 +153,6 @@ export const actions = {
     });
     if (got.length) toast('Achievement unlocked!'); else if (floor) toast("Today's floor is hit. Full mission success!");
   },
-  /** One-off errands have no timer: one tap marks the whole thing done, timed as if it ran its planned length up to now. */
-  doneNow(missionId: string, units: number, plannedMin: number, key?: string) {
-    if (S().running) return;
-    actions.start(missionId, units, plannedMin, undefined, key);
-    mutate((s) => { if (s.running) s.running.startedAt = nowTs() - Math.round(plannedMin * factor(s, missionId)) * 60000; });
-    actions.finish(true);
-  },
   cancelRun() { mutate((s) => { s.running = undefined; }); },
   flare() {
     const id = uid();

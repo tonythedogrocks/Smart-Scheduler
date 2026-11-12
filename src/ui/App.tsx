@@ -3,7 +3,7 @@ import { S, L, actions, go, setLocal, type Nav } from '../model/store';
 import { buildLibrary, type PanelVM } from '../model/vm';
 import { GRACE, planSig } from '../model/planner';
 import { eatingNow } from '../model/schedule';
-import { onSyncStatus, syncStatus } from '../model/sync';
+import { isFresh, onSyncStatus, syncStatus } from '../model/sync';
 import type { PlanSnap } from '../model/types';
 import { addDays, dateOf, fmtDate, fmtDay, fmtDur, nowTs, diffDays } from '../model/time';
 import { levelName } from '../model/seed';
@@ -69,6 +69,7 @@ export function App() {
     if (needStatus) return;
     const d = S().days[today];
     if (!d?.level || !d.morningEnd || dateOf(d.morningEnd) !== today) return;
+    if (!isFresh()) return; // don't fix a plan made from old data
     const sig = planSig(S(), today);
     if (d.plan?.sig === sig) return;
     const items: PlanSnap[] = lib.todayItems.filter((i) => i.kind === 'mission' && !i.done && !i.running && i.missionId)
@@ -77,7 +78,7 @@ export function App() {
   });
   // Missed: a planned block still unstarted 5 minutes after its time. Log it (feeds the energy model) and the day re-plans.
   useEffect(() => {
-    if (needStatus || S().running || document.visibilityState !== 'visible') return;
+    if (needStatus || S().running || document.visibilityState !== 'visible' || !isFresh()) return; // never on old data
     const t = new Date(nowTs()), nm = t.getHours() * 60 + t.getMinutes();
     // still eating: nothing counts as missed until he taps done
     if (eatingNow(S(), today, nm)) return;

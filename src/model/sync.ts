@@ -14,6 +14,8 @@ const FILE = 'data.json';
 let status: SyncStatus = { state: 'off' };
 const subs = new Set<() => void>();
 export const syncStatus = () => status;
+/** Safe to act on what's here (e.g. call something missed)? Only right after a good sync, or with sync off. */
+export const isFresh = () => !getCfg() || (status.state === 'idle' && !!status.at && Date.now() - status.at < 90000);
 export const onSyncStatus = (f: () => void) => { subs.add(f); return () => { subs.delete(f); }; };
 const set = (s: SyncStatus) => { status = s; subs.forEach((f) => f()); };
 
@@ -89,7 +91,10 @@ let timer: any;
 export function startSync() {
   set({ state: getCfg() ? 'idle' : 'off' });
   onChange(() => { clearTimeout(timer); timer = setTimeout(syncNow, 2500); });
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow(); else if (timer) { clearTimeout(timer); syncNow(); } });
+  // coming back to the app: what's here may be old until the next pull
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { set({ ...status, at: 0 }); syncNow(); } else if (timer) { clearTimeout(timer); syncNow(); } });
+  // while open, pull every minute so another device's changes show up (and this one never acts on old data)
+  setInterval(() => { if (document.visibilityState === 'visible') syncNow(); }, 60000);
   window.addEventListener('online', () => syncNow());
   syncNow();
 }

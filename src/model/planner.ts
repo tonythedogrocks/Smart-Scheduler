@@ -398,7 +398,7 @@ export const GRACE = 5;
  */
 export function planSig(s: State, date: string): string {
   const d = s.days[date] || {};
-  return JSON.stringify([d.level, d.morningEnd ? 1 : 0, eventsOn(s, date).map((e) => [e.id, e.start, e.end, e.travel]), d.ate, d.cook, d.cookAt, d.cookStart ? 1 : 0, d.cookEnd ? 1 : 0, d.dinnerAt, d.lunchAt, d.starts, (d.misses || []).length,
+  return JSON.stringify([d.level, d.morningEnd ? 1 : 0, eventsOn(s, date).map((e) => [e.id, e.start, e.end, e.travel]), d.ate, d.cook, d.cookAt, d.cookStart ? 1 : 0, d.cookEnd ? 1 : 0, d.dinnerAt, d.lunchAt, d.lunchMin, d.dinnerMin, d.starts, (d.misses || []).length,
     s.missions.filter((m) => !m.archived).map((m) => m.id).join(','), s.settingsT || 0]);
 }
 

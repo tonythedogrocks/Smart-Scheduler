@@ -112,7 +112,7 @@ export function fixedBlocks(s: State, date: string): Block[] {
     busy.push([at, at + len]);
     return at + len;
   };
-  const lunchEnd = place('lunch', day.lunchAt ?? st.lunchAt, st.lunchMin, 660, 870);
+  const lunchEnd = place('lunch', day.lunchAt ?? st.lunchAt, day.lunchMin ?? st.lunchMin, 660, 870);
   // Cooking: a block right before dinner that turns into dinner when it's done.
   let dinnerWant = day.dinnerAt ?? learnedDinner(s, date) ?? st.dinnerAt;
   const fam = day.cook === 'family';
@@ -124,7 +124,7 @@ export function fixedBlocks(s: State, date: string): Block[] {
     out.push({ key: 'f:cook', start: cs, end: ce, title: fam ? 'Cooking for the family' : 'Cooking dinner', sub: day.cookEnd ? `${Math.round(ce - cs)} min` : `about ${cookLen} min · dinner right after`, kind: 'routine', blocking: true });
     busy.push([cs, ce]);
   }
-  const dinnerEnd = place('dinner', dinnerWant, st.dinnerMin, 1020, 1230);
+  const dinnerEnd = place('dinner', dinnerWant, day.dinnerMin ?? st.dinnerMin, 1020, 1230);
   const wd = weekday(date);
   if (st.dishDays.includes(wd)) {
     if (lunchEnd > 0) out.push({ key: 'f:dishes1', start: lunchEnd, end: lunchEnd + st.dishesMin, title: 'Dishes', sub: 'After lunch · 15 to 30 min', kind: 'routine', blocking: true });

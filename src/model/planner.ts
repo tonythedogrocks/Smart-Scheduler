@@ -1,6 +1,6 @@
 import type { State, Mission, Level, Objective } from './types';
 import { addDays, dateOf, diffDays, minsOf, weekStart, weekday } from './time';
-import { energyBetween, predictedCurve } from './energy';
+import { energyBetween, predictedCurve, realMisses } from './energy';
 import { eatingNow, eventsOn, fixedBlocks, freeSlots, isRest, sunTimes, type Block } from './schedule';
 import { afterStats, weekdayFactor, learnedLevel, capacityAt, choreDue, exerciseCeiling, exerciseMinWeek, factor, flareSpike, isExercise, partOf, predictLevel, workMinOn } from './learn';
 
@@ -411,7 +411,7 @@ function missionsHash(s: State): string {
 
 export function planSig(s: State, date: string): string {
   const d = s.days[date] || {};
-  return JSON.stringify([d.level, d.morningEnd ? 1 : 0, eventsOn(s, date).map((e) => [e.id, e.start, e.end, e.travel]), d.ate, d.cook, d.cookAt, d.cookStart ? 1 : 0, d.cookEnd ? 1 : 0, d.dinnerAt, d.lunchAt, d.lunchMin, d.dinnerMin, d.starts, (d.misses || []).length,
+  return JSON.stringify([d.level, d.morningEnd ? 1 : 0, eventsOn(s, date).map((e) => [e.id, e.start, e.end, e.travel]), d.ate, d.cook, d.cookAt, d.cookStart ? 1 : 0, d.cookEnd ? 1 : 0, d.dinnerAt, d.lunchAt, d.lunchMin, d.dinnerMin, d.starts, realMisses(s, date).length,
     s.missions.filter((m) => !m.archived).map((m) => m.id).join(','), s.settingsT || 0, missionsHash(s)]);
 }
 

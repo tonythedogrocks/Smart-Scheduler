@@ -31,7 +31,7 @@ export function dayObservations(s: State, date: string): Map<number, number> {
     const pace = clamp(planned / actual, 0.6, 1.4);
     add(minsOf(l.start), minsOf(l.end), l.done ? pace : l.units > 0 ? 0.6 : 0.4);
   }
-  for (const x of s.days[date]?.misses || []) add(x.at, x.at + SLOT, 0.2);
+  for (const x of realMisses(s, date)) add(x.at, x.at + SLOT, 0.2);
   for (const p of s.prior || []) if (p.date === date) for (const b of p.blocks) add(b.s, b.e, b.v);
   const level = s.days[date]?.level ?? (s.prior || []).find((p) => p.date === date)?.level ?? 3;
   const out = new Map<number, number>();
@@ -69,7 +69,7 @@ export function predictedCurve(s: State, date: string, level: number, today: str
   const sm = base.map((v, i) => 0.25 * (base[i - 1] ?? v) + 0.5 * v + 0.25 * (base[i + 1] ?? v));
   const lm = levelMult(level);
   const out = sm.map((v) => v * lm);
-  if (date === today) for (const x of s.days[date]?.misses || []) { const k = Math.floor(x.at / SLOT); if (out[k] !== undefined) out[k] *= 0.6; }
+  if (date === today) for (const x of realMisses(s, date)) { const k = Math.floor(x.at / SLOT); if (out[k] !== undefined) out[k] *= 0.6; }
   return out;
 }
 
@@ -90,3 +90,10 @@ export function energyPeak(s: State, today: string): { from: number; to: number 
   return Math.abs(best / 2 - 1) < 0.05 ? null : { from: at * SLOT, to: (at + 2) * SLOT };
 }
 void dateOf;
+
+/** Today's misses that really were misses: not ones where he was in fact doing that task at the time
+ * (a device on old data can log those). */
+export function realMisses(s: State, date: string): { m: string; at: number }[] {
+  const logs = s.logs.filter((l) => l.date === date);
+  return (s.days[date]?.misses || []).filter((x) => !logs.some((l) => l.missionId === x.m && minsOf(l.start) <= x.at + 5 && (l.end <= 0 || minsOf(l.end) >= x.at)));
+}

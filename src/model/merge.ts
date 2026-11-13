@@ -55,7 +55,10 @@ export function merge(a: State, b: State): State {
       // a copy that tracks fields but never touched this one is the oldest word on it; untracked (older) copies use the record's time
       const ta = x.ft ? x.ft[f] ?? 0 : x.t ?? 0, tb = d.ft ? d.ft[f] ?? 0 : d.t ?? 0;
       const src: any = tb > ta ? d : x;
-      if (src[f] !== undefined) m[f] = structuredClone(src[f]);
+      if (f === 'misses') { // each device only ever adds misses: keep every one either side saw
+        const all = [...((x as any).misses || []), ...((d as any).misses || [])];
+        m[f] = all.filter((v, i) => all.findIndex((w) => w.m === v.m && w.at === v.at) === i).sort((p, q) => p.at - q.at).slice(-40);
+      } else if (src[f] !== undefined) m[f] = structuredClone(src[f]);
       ft[f] = Math.max(ta, tb);
     }
     m.ft = ft; m.t = Math.max(x.t || 0, d.t || 0);

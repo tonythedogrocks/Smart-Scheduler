@@ -689,3 +689,13 @@ describe('finishing early', () => {
     expect(!!S().days['2026-11-12'].plan).toBe(kept);
   });
 });
+
+describe('false misses', () => {
+  it('a miss for a task that was actually being done at that time does not count', async () => {
+    const { realMisses } = await import('../src/model/energy');
+    const s = sample();
+    s.days['2026-11-12'] = { misses: [{ m: 'course-lessons', at: 600 }, { m: 'course-paper', at: 700 }] };
+    s.logs.push({ id: 'l1', missionId: 'course-lessons', date: '2026-11-12', start: at('2026-11-12T09:55'), end: at('2026-11-12T10:30'), plannedMin: 30, units: 1, done: true });
+    expect(realMisses(s, '2026-11-12')).toEqual([{ m: 'course-paper', at: 700 }]);
+  });
+});

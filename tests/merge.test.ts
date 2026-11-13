@@ -73,3 +73,12 @@ describe('days merge field by field', () => {
     expect(merge(b, a).days['2026-11-12'].cookAt).toBe(1080);
   });
 });
+
+describe('misses from two devices', () => {
+  it('are combined, not replaced', () => {
+    const a = sample(), b = sample();
+    a.days['2026-11-12'] = { misses: [{ m: 'x', at: 600 }], ft: { misses: 1 }, t: 1 };
+    b.days['2026-11-12'] = { misses: [{ m: 'y', at: 700 }], ft: { misses: 2 }, t: 2 };
+    expect(merge(a, b).days['2026-11-12'].misses).toEqual([{ m: 'x', at: 600 }, { m: 'y', at: 700 }]);
+  });
+});

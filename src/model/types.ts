@@ -83,7 +83,7 @@ export interface DayRec {
   t?: number; ft?: Record<string, number>; level?: Level; setAt?: number; floorAwarded?: boolean; lunchAt?: number; dinnerAt?: number; lunchMin?: number; dinnerMin?: number; starts?: Record<string, number>; cook?: boolean | 'family'; cookAt?: number; cookStart?: number; cookEnd?: number; morningEnd?: number; dinnerTap?: number;
   ate?: Partial<Record<'lunch' | 'dinner', { at: number; big?: boolean; end?: number }>>; // end: when he tapped done eating
   misses?: { m: string; at: number }[];
-  plan?: { sig: string; items: PlanSnap[] }; // today's plan once the day has started: kept until something real changes or a block is missed // planned blocks that passed without being started (start time, minutes) // confirmed meals: start (minutes from midnight), and whether it was a large one
+  plan?: { sig: string; items: PlanSnap[]; know?: number }; // today's plan once the day has started: kept until something real changes or a block is missed // planned blocks that passed without being started (start time, minutes) // confirmed meals: start (minutes from midnight), and whether it was a large one
 }
 
 export interface Settings {
@@ -134,4 +134,5 @@ export interface State {
   running?: Running;
   deleted?: Record<string, number>; settingsT?: number; runningT?: number;
   updatedAt: number;
+  build?: number;          // newest app version that has written this data: an older copy must update before it writes
 }

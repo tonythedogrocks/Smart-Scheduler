@@ -63,7 +63,7 @@ export function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-  useEffect(() => { if (!needStatus) actions.checkFloor(); });
+  useEffect(() => { if (!needStatus && isFresh()) actions.checkFloor(); });
   // Today's plan is fixed once the day has started; save it whenever it was (re)built.
   useEffect(() => {
     if (needStatus) return;
@@ -164,7 +164,7 @@ export function App() {
                 <span>Needed about {fmtDay(a.date) === fmtDay(addDays(today, 1)) ? 'tomorrow' : fmtDate(a.date)}. It will be planned around when you're home.</span>
               </div>
             ))}
-            {syncStatus().state === 'error' && /token|allowed|not found/i.test(syncStatus().error || '') && (
+            {syncStatus().state === 'error' && /token|allowed|not found|out of date/i.test(syncStatus().error || '') && (
               <button type="button" class="alert" onClick={() => go({ view: 'settings' })}>
                 <span class="k">SYNC ISN'T WORKING</span>
                 <span>{syncStatus().error} Your changes are saved on this device but aren't reaching your other one. Tap to fix it in Settings.</span>

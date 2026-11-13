@@ -5,7 +5,7 @@ import { dateOf, nowTs, uid } from './time';
 import { describeUnits, excusedHabits, habitsDue, nextGap, nextLabels, planSig, GRACE } from './planner';
 import { factor } from './learn';
 import { unlock } from './game';
-import { stamp } from './merge';
+import { know, stamp } from './merge';
 
 export interface Nav { view: 'shelf' | 'col' | 'toc' | 'page' | 'panel' | 'debrief' | 'settings' | 'achievements'; c: string; i: string; ch: number; p: string; dir: 'in' | 'out' }
 export interface Local { nav: Nav; status: boolean; sheet: null | 'flare' | 'doing' | 'add' | 'mission'; sheetArg?: string; toast?: { text: string; id: number }; lastFlare?: string }
@@ -204,7 +204,7 @@ export const actions = {
   },
   /** Fix today's plan once the day has started (or after a change rebuilt it). */
   savePlan(sig: string, items: PlanSnap[]) {
-    mutate((s) => { const d = (s.days[today()] ||= {}); d.plan = { sig, items }; });
+    mutate((s) => { const d = (s.days[today()] ||= {}); d.plan = { sig, items, know: know(s) }; });
   },
   /** A planned block passed without being started: log it as missed (feeds the energy model), then the day re-plans. */
   /** A meal not eaten 5 minutes past its time moves to the next free stretch, without reshuffling the rest of the day. */

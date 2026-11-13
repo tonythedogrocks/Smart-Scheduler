@@ -82,3 +82,13 @@ describe('misses from two devices', () => {
     expect(merge(a, b).days['2026-11-12'].misses).toEqual([{ m: 'x', at: 600 }, { m: 'y', at: 700 }]);
   });
 });
+
+describe('plans from two devices', () => {
+  it('the plan made knowing more wins, even if the other was saved later', () => {
+    const a = sample(), b = sample();
+    a.days['2026-11-12'] = { plan: { sig: 'a', items: [], know: 500 }, ft: { plan: 10 }, t: 10 };
+    b.days['2026-11-12'] = { plan: { sig: 'b', items: [], know: 100 }, ft: { plan: 99 }, t: 99 };
+    expect(merge(a, b).days['2026-11-12'].plan!.sig).toBe('a');
+    expect(merge(b, a).days['2026-11-12'].plan!.sig).toBe('a');
+  });
+});

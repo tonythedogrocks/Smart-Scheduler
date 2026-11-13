@@ -55,7 +55,11 @@ export function merge(a: State, b: State): State {
       // a copy that tracks fields but never touched this one is the oldest word on it; untracked (older) copies use the record's time
       const ta = x.ft ? x.ft[f] ?? 0 : x.t ?? 0, tb = d.ft ? d.ft[f] ?? 0 : d.t ?? 0;
       const src: any = tb > ta ? d : x;
-      if (f === 'misses') { // each device only ever adds misses: keep every one either side saw
+      if (f === 'plan') { // the plan made knowing the most wins, not the one saved last: a device on old data can't replace it
+        const px = (x as any).plan, pd = (d as any).plan, kx = px?.know ?? 0, kd = pd?.know ?? 0;
+        const pick = px && pd ? (kd > kx || (kd === kx && tb > ta) ? pd : px) : src.plan;
+        if (pick !== undefined) m[f] = structuredClone(pick);
+      } else if (f === 'misses') { // each device only ever adds misses: keep every one either side saw
         const all = [...((x as any).misses || []), ...((d as any).misses || [])];
         m[f] = all.filter((v, i) => all.findIndex((w) => w.m === v.m && w.at === v.at) === i).sort((p, q) => p.at - q.at).slice(-40);
       } else if (src[f] !== undefined) m[f] = structuredClone(src[f]);
@@ -86,3 +90,12 @@ const canon = (v: any): any => {
 };
 /** Same data, whatever order the two devices happen to hold it in? */
 export const same = (a: State, b: State) => JSON.stringify(canon({ ...a, updatedAt: 0 })) === JSON.stringify(canon({ ...b, updatedAt: 0 }));
+
+/** How up to date a copy is: the time of the newest thing it knows about (plans themselves don't count). */
+export function know(s: State): number {
+  let k = Math.max(s.settingsT || 0, s.runningT || 0);
+  for (const c of COLS) for (const r of (s[c] || []) as Rec[]) if ((r.t || 0) > k) k = r.t!;
+  for (const d of Object.values(s.days || {})) for (const [f, t] of Object.entries(d.ft || {})) if (f !== 'plan' && t > k) k = t;
+  for (const t of Object.values(s.deleted || {})) if (t > k) k = t;
+  return k;
+}

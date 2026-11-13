@@ -82,8 +82,9 @@ export function fixedBlocks(s: State, date: string): Block[] {
   for (const e of eventsOn(s, date)) {
     if (e.travel) out.push({ key: `f:to:${e.id}`, start: e.start - e.travel, end: e.start, title: `Travel to ${e.title}`, sub: `${e.travel} min`, kind: 'travel', evtId: e.id, blocking: true });
     out.push({ key: `f:ev:${e.id}`, start: e.start, end: e.end, title: e.title, sub: e.note, kind: 'event', evtId: e.id, blocking: true });
-    if (e.travel) out.push({ key: `f:from:${e.id}`, start: e.end, end: e.end + e.travel, title: 'Travel home', sub: `${e.travel} min`, kind: 'travel', evtId: e.id, blocking: true });
-    busy.push([e.start - e.travel, e.end + e.travel]);
+    const back = e.travelBack ?? e.travel;
+    if (back) out.push({ key: `f:from:${e.id}`, start: e.end, end: e.end + back, title: 'Travel home', sub: `${back} min`, kind: 'travel', evtId: e.id, blocking: true });
+    busy.push([e.start - e.travel, e.end + back]);
   }
   const free = (a: number, len: number) => !busy.some(([b0, b1]) => overlaps(a, a + len, b0, b1));
   const day = s.days[date] || {};

@@ -61,7 +61,8 @@ export interface Evt {
   weekday?: number;        // weekly (0 = Sunday)
   nth?: number[];          // with weekday: only these weeks of the month (1-5; 5 = last)
   start: number; end: number; // minutes from midnight
-  travel: number;          // each way
+  travel: number;          // each way (or just there, when travelBack is set)
+  travelBack?: number;     // trip home, when it differs from the trip there
   note?: string;
   exerciseMin?: number;
   choices?: number[];      // start times to pick between, week by week

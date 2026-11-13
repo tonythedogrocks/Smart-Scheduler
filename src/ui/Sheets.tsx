@@ -75,7 +75,7 @@ function Add() {
   const others = kind === 'objective' ? [] : eventsOn(S(), date);
   const warn: string[] = [];
   for (const o of others) {
-    if (st - tr < o.end + o.travel && o.start - o.travel < en + tr) {
+    if (st - tr < o.end + (o.travelBack ?? o.travel) && o.start - o.travel < en + tr) {
       if (kind === 'shift' && o.shiftGap && en <= o.start) { if (o.start - en < o.shiftGap) warn.push(`This shift ends ${o.start - en} min before ${o.title}. Going straight there needs at least ${o.shiftGap} min, travel included.`); }
       else warn.push(`This overlaps ${o.title} (${fmtT(o.start)} to ${fmtT(o.end)}), travel included.`);
     }

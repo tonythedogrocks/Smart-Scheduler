@@ -712,3 +712,14 @@ describe('dishes after lunch', () => {
     expect(dishes.end).toBeLessThanOrEqual(trip.start);
   });
 });
+
+describe('different trip home', () => {
+  it('uses travelBack for the ride home', async () => {
+    const { fixedBlocks } = await import('../src/model/schedule');
+    const s = sample();
+    s.events.push({ id: 'ev', title: 'Event', kind: 'event', start: 840, end: 1020, travel: 50, travelBack: 30, date: '2026-11-13' } as any);
+    const b = fixedBlocks(s, '2026-11-13');
+    expect(b.find((x) => x.key === 'f:to:ev')!.start).toBe(790);
+    expect(b.find((x) => x.key === 'f:from:ev')!.end).toBe(1050);
+  });
+});

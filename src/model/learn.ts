@@ -221,7 +221,7 @@ export function exerciseMinWeek(s: State, weekStartDate: string): number {
   let t = s.logs.filter((l) => l.date >= weekStartDate && l.date < end && isExercise(ph.get(l.missionId))).reduce((a, l) => a + mins(l), 0);
   for (const e of s.events) if (e.date && e.date >= weekStartDate && e.date < end && e.kind === 'workout') t += e.exerciseMin ?? e.end - e.start;
   // biking there and back counts: commitments (dated or weekly) and errands done by bike
-  for (let i = 0; i < 7; i++) for (const e of eventsOn(s, addDays(weekStartDate, i))) if (e.bike || (e.kind === 'shift' && s.settings.shift.bike)) t += 2 * e.travel;
+  for (let i = 0; i < 7; i++) for (const e of eventsOn(s, addDays(weekStartDate, i))) if (e.bike || (e.kind === 'shift' && s.settings.shift.bike)) t += e.travel + (e.travelBack ?? e.travel);
   for (const l of s.logs) { const m = ph.get(l.missionId); if (m?.bike && m.travel && l.done && l.date >= weekStartDate && l.date < end) t += 2 * m.travel; }
   return t;
 }
@@ -284,7 +284,7 @@ export function cameAfter(s: State, ts: number, skipId?: string): string | null 
   for (const e of s.events) {
     if (e.date !== date) continue;
     const base = parseD(date).getTime() - 12 * 3600000;
-    consider(base + (e.end + e.travel) * 60000, e.kind === 'event' || e.kind === 'exam' ? 'event' : e.kind);
+    consider(base + (e.end + (e.travelBack ?? e.travel)) * 60000, e.kind === 'event' || e.kind === 'exam' ? 'event' : e.kind);
   }
   return best ? (best as { what: string }).what : null;
 }

@@ -723,3 +723,17 @@ describe('different trip home', () => {
     expect(b.find((x) => x.key === 'f:from:ev')!.end).toBe(1050);
   });
 });
+
+describe('timing dishes', () => {
+  it('the dishes block follows the times he tapped, and their length is learned', async () => {
+    const { fixedBlocks, learnedDishes } = await import('../src/model/schedule');
+    const s = sample();
+    s.settings.dishDays = [0, 1, 2, 3, 4, 5, 6]; s.settings.dishesMin = 20;
+    s.days['2026-11-12'] = { ate: { lunch: { at: 720 } }, dishes: { lunch: { start: at('2026-11-12T12:35'), end: at('2026-11-12T12:47') } } };
+    const d = fixedBlocks(s, '2026-11-12').find((b) => b.key === 'f:dishes1')!;
+    expect([d.start, d.end]).toEqual([755, 767]);
+    s.days['2026-11-10'] = { dishes: { lunch: { start: at('2026-11-10T12:00'), end: at('2026-11-10T12:10') } } };
+    s.days['2026-11-11'] = { dishes: { dinner: { start: at('2026-11-11T19:00'), end: at('2026-11-11T19:10') } } };
+    expect(learnedDishes(s)).toBe(10);
+  });
+});

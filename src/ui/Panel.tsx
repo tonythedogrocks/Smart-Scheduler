@@ -128,6 +128,17 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
               <span>DONE!</span>
             </button>
         )}
+        {p.act === 'dishes' && p.date === lib.today && (() => {
+          const meal = p.key === 'f:dishes1' ? 'lunch' : 'dinner', r = day.dishes?.[meal];
+          const put = (v: { start: number; end?: number }) => actions.setDay(p.date!, { dishes: { ...(day.dishes || {}), [meal]: v } });
+          return r?.end !== undefined ? <span class="caption" style="align-self:flex-start;font-size:17px">DISHES DONE. {fmtDur((r.end - r.start) / 60000)}</span>
+            : r ? (
+              <>
+                <span class="caption" style="align-self:flex-start;font-size:17px;transform:rotate(-1.5deg)">DISHES... {fmtDur(Math.max(0, (nowTs() - r.start) / 60000))}</span>
+                <button type="button" class="big fin" onClick={() => put({ ...r, end: nowTs() })}>DONE!</button>
+              </>
+            ) : <button type="button" class="big go" onClick={() => put({ start: nowTs() })}>START!</button>;
+        })()}
         {p.act === 'cook' && p.date && (
           day.cookEnd ? <span class="caption" style="align-self:flex-start;font-size:17px">COOKED. DINNER'S ON.</span>
           : day.cookStart ? (

@@ -89,7 +89,8 @@ export function fixedBlocks(s: State, date: string): Block[] {
   const free = (a: number, len: number) => !busy.some(([b0, b1]) => overlaps(a, a + len, b0, b1));
   const day = s.days[date] || {};
   const tailFits = new Set<string>();
-  const dish = st.dishDays.includes(weekday(date)) ? st.dishesMin : 0;
+  const dishLen = learnedDishes(s);
+  const dish = st.dishDays.includes(weekday(date)) ? dishLen : 0;
   // tail: time that must follow the meal right away (dishes), so the meal is placed where both fit
   const place = (meal: 'lunch' | 'dinner', want: number, len: number, lo: number, hi: number, tail = 0) => {
     const title = meal === 'lunch' ? 'Lunch' : 'Dinner';
@@ -134,10 +135,15 @@ export function fixedBlocks(s: State, date: string): Block[] {
     busy.push([cs, ce]);
   }
   const dinnerEnd = place('dinner', dinnerWant, day.dinnerMin ?? st.dinnerMin, 1020, 1230, dish);
+  const dishBlock = (key: string, meal: 'lunch' | 'dinner', after: number, label: string): Block => {
+    const r = day.dishes?.[meal];
+    const a = r ? minsOf(r.start) : after, e = r?.end !== undefined ? Math.max(a + 1, minsOf(r.end)) : a + dishLen;
+    return { key, start: a, end: e, title: 'Dishes', sub: r?.end !== undefined ? `${Math.round(e - a)} min` : `${label} · about ${dishLen} min`, kind: 'routine', blocking: true };
+  };
   const wd = weekday(date);
   if (st.dishDays.includes(wd)) {
-    if (lunchEnd > 0 && (tailFits.has('lunch') || day.ate?.lunch)) out.push({ key: 'f:dishes1', start: lunchEnd, end: lunchEnd + st.dishesMin, title: 'Dishes', sub: 'After lunch · 15 to 30 min', kind: 'routine', blocking: true });
-    if (dinnerEnd > 0 && (tailFits.has('dinner') || day.ate?.dinner)) out.push({ key: 'f:dishes2', start: dinnerEnd, end: dinnerEnd + st.dishesMin, title: 'Dishes', sub: 'After dinner · 15 to 30 min', kind: 'routine', blocking: true });
+    if (lunchEnd > 0 && (tailFits.has('lunch') || day.ate?.lunch)) out.push(dishBlock('f:dishes1', 'lunch', lunchEnd, 'After lunch'));
+    if (dinnerEnd > 0 && (tailFits.has('dinner') || day.ate?.dinner)) out.push(dishBlock('f:dishes2', 'dinner', dinnerEnd, 'After dinner'));
   }
   out.push({ key: 'f:off', start: off, end: prep, title: 'Off Duty', sub: 'Protected · 2 h before bed', kind: 'offduty', blocking: true });
   out.push({ key: 'f:sleep', start: prep + 50, end: prep + 50 + 480, title: 'Asleep', sub: '8 h', kind: 'sleep', blocking: true });
@@ -167,4 +173,12 @@ export function eatingNow(s: State, date: string, nowMin: number): 'lunch' | 'di
     if (nowMin < got.at + 2 * len) return meal;
   }
   return null;
+}
+
+/** How long dishes really take: the median of the last ones he timed (3 or more), else the setting. */
+export function learnedDishes(s: State): number {
+  const xs: number[] = [];
+  for (const d of Object.values(s.days || {})) for (const r of Object.values(d.dishes || {})) if (r && r.end !== undefined && r.end > r.start) xs.push((r.end - r.start) / 60000);
+  const last = xs.slice(-10).sort((a, b) => a - b);
+  return last.length >= 3 ? Math.max(5, Math.round(last[Math.floor(last.length / 2)] / 5) * 5) : s.settings.dishesMin;
 }

@@ -411,7 +411,7 @@ function missionsHash(s: State): string {
 
 export function planSig(s: State, date: string): string {
   const d = s.days[date] || {};
-  return JSON.stringify([d.level, d.morningEnd ? 1 : 0, eventsOn(s, date).map((e) => [e.id, e.start, e.end, e.travel, e.travelBack]), d.ate, d.cook, d.cookAt, d.cookStart ? 1 : 0, d.cookEnd ? 1 : 0, d.dinnerAt, d.lunchAt, d.lunchMin, d.dinnerMin, d.starts, realMisses(s, date).length,
+  return JSON.stringify([d.level, d.morningEnd ? 1 : 0, eventsOn(s, date).map((e) => [e.id, e.start, e.end, e.travel, e.travelBack]), d.ate, d.cook, d.cookAt, d.cookStart ? 1 : 0, d.cookEnd ? 1 : 0, d.dishes, d.dinnerAt, d.lunchAt, d.lunchMin, d.dinnerMin, d.starts, realMisses(s, date).length,
     s.missions.filter((m) => !m.archived).map((m) => m.id).join(','), s.settingsT || 0, missionsHash(s)]);
 }
 
@@ -425,6 +425,12 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   const morningOpen = isToday && !s.days[date]?.morningEnd;
   if (morningOpen) { const mb = fixed.find((b) => b.key === 'f:morning'); if (mb && mb.end < round5(nowMin)) mb.end = round5(nowMin); }
   // a meal he started and hasn't tapped done on runs on to now (up to twice its length, in case he forgot)
+  // dishes he started and hasn't tapped done on run on to now (up to an hour)
+  if (isToday) for (const meal of ['lunch', 'dinner'] as const) {
+    const r = s.days[date]?.dishes?.[meal]; if (!r || r.end !== undefined) continue;
+    const b = fixed.find((x) => x.key === (meal === 'lunch' ? 'f:dishes1' : 'f:dishes2'));
+    if (b && b.end < round5(nowMin) && nowMin < b.start + 60) b.end = round5(nowMin);
+  }
   const eating = isToday ? eatingNow(s, date, nowMin) : null;
   if (eating) { const mb = fixed.find((b) => b.kind === 'meal' && b.meal === eating); if (mb && mb.end < round5(nowMin)) mb.end = round5(nowMin); }
   const byId = new Map(s.missions.map((m) => [m.id, m]));

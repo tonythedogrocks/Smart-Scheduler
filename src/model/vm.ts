@@ -10,7 +10,7 @@ export interface PanelVM {
   time?: string; kick?: string; color?: string; fixed?: boolean; past?: boolean;
   now?: boolean; done?: boolean; running?: boolean; alert?: boolean; must?: boolean;
   missionId?: string; units?: number; baseMin?: number; min?: number; step?: number;
-  act?: 'mission' | 'meal' | 'cook' | 'morning' | 'backup' | 'choice' | 'event' | 'objective' | 'info';
+  act?: 'mission' | 'meal' | 'cook' | 'dishes' | 'morning' | 'backup' | 'choice' | 'event' | 'objective' | 'info';
   evtId?: string; date?: string; objectiveId?: string; meal?: 'lunch' | 'dinner'; editable?: boolean;
 }
 export interface ChapterVM { title: string; panels: PanelVM[] }
@@ -30,8 +30,8 @@ function itemPanel(s: State, it: PlanItem, date: string, isToday: boolean): Pane
   const h = b!.kind === 'note' ? (b!.meal === 'lunch' ? 'LUNCH' : 'DINNER') : it.now && isToday ? 'NOW' : fmtT(it.start);
   return {
     // only what he marks is DONE; a fixed block whose time has passed is just past
-    time, fixed: true, key: it.key, h, t: it.title, m: it.sub, past: it.past && isToday, done: b!.key === 'f:morning' ? !!s.days[date]?.morningEnd : b!.key === 'f:cook' ? !!s.days[date]?.cookEnd : !!b!.ate, now: it.now, date,
-    act: b!.key === 'f:cook' ? 'cook' : b!.key === 'f:morning' ? 'morning' : b!.kind === 'meal' || b!.kind === 'note' ? 'meal' : b!.evtId ? (s.events.find((e) => e.id === b!.evtId)?.choices && b!.kind === 'event' ? 'choice' : 'event') : 'info',
+    time, fixed: true, key: it.key, h, t: it.title, m: it.sub, past: it.past && isToday, done: b!.key === 'f:morning' ? !!s.days[date]?.morningEnd : b!.key.startsWith('f:dishes') ? s.days[date]?.dishes?.[b!.key === 'f:dishes1' ? 'lunch' : 'dinner']?.end !== undefined : b!.key === 'f:cook' ? !!s.days[date]?.cookEnd : !!b!.ate, now: it.now, date,
+    act: b!.key === 'f:cook' ? 'cook' : b!.key.startsWith('f:dishes') ? 'dishes' : b!.key === 'f:morning' ? 'morning' : b!.kind === 'meal' || b!.kind === 'note' ? 'meal' : b!.evtId ? (s.events.find((e) => e.id === b!.evtId)?.choices && b!.kind === 'event' ? 'choice' : 'event') : 'info',
     evtId: b!.evtId, meal: b!.meal, wide: b!.kind === 'event',
     d: b!.kind === 'offduty' ? 'Rest counts. It feeds tomorrow.' : undefined,
   };

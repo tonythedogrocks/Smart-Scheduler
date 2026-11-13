@@ -517,7 +517,17 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
       for (let t = round5(nowMin); t + steps[steps.length - 1].at + steps[steps.length - 1].min <= off; t += 5) {
         if (steps.every((st) => slots.some(([x, y]) => x <= t + st.at && t + st.at + st.min <= y))) { anchor = t; break; }
       }
-      if (anchor < 0) continue; // no stretch at home long enough today: it waits, quietly
+      // a due chore doesn't get dropped: if no free stretch fits, its 5-minute steps may share time with
+      // meals, routines or Off Duty, as long as he's home (not out at an event) and before getting ready for bed
+      if (anchor < 0) {
+        const away = fixed.filter((b) => b.kind === 'event' || b.kind === 'travel').map((b) => [b.start, b.end] as [number, number]);
+        const bed = fixed.find((x) => x.kind === 'offduty')!.end;
+        const home = (a: number, len: number) => !away.some(([x, y]) => a < y && x < a + len) && a + len <= bed;
+        for (let t = round5(nowMin); t + steps[steps.length - 1].at + steps[steps.length - 1].min <= bed; t += 5) {
+          if (steps.every((st) => home(t + st.at, st.min))) { anchor = t; break; }
+        }
+      }
+      if (anchor < 0) continue; // not even that fits today: tomorrow
     }
     steps.forEach((st, i) => {
       if (doneSteps.has(i) || (run?.missionId === m.id && run.step === i)) return;
@@ -638,7 +648,8 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   // Once the day has started, keep today's plan as it was fixed: only what changed since (done, running) differs.
   const stored = isToday && !morningOpen ? s.days[date]?.plan : undefined;
   if (stored && stored.sig === planSig(s, date)) {
-    const keep = items.filter((i) => i.kind !== 'mission' || i.done || i.running);
+    // chore steps are always placed fresh: a saved plan never hides a due chore
+    const keep = items.filter((i) => i.kind !== 'mission' || i.done || i.running || i.key.startsWith('c:'));
     const have = new Set(keep.filter((i) => i.kind === 'mission').map((i) => i.key));
     for (const p of stored.items) if (!have.has(p.key)) keep.push({ ...p, kind: 'mission' });
     items.length = 0; items.push(...keep);

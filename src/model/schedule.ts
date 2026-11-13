@@ -87,7 +87,10 @@ export function fixedBlocks(s: State, date: string): Block[] {
   }
   const free = (a: number, len: number) => !busy.some(([b0, b1]) => overlaps(a, a + len, b0, b1));
   const day = s.days[date] || {};
-  const place = (meal: 'lunch' | 'dinner', want: number, len: number, lo: number, hi: number) => {
+  const tailFits = new Set<string>();
+  const dish = st.dishDays.includes(weekday(date)) ? st.dishesMin : 0;
+  // tail: time that must follow the meal right away (dishes), so the meal is placed where both fit
+  const place = (meal: 'lunch' | 'dinner', want: number, len: number, lo: number, hi: number, tail = 0) => {
     const title = meal === 'lunch' ? 'Lunch' : 'Dinner';
     // a confirmed meal sits exactly where it happened
     const got = day.ate?.[meal];
@@ -98,22 +101,26 @@ export function fixedBlocks(s: State, date: string): Block[] {
       return end;
     }
     let at = -1;
-    if (free(want, len)) at = want;
+    const need = len + tail;
+    if (free(want, need)) at = want;
     else {
-      const c = busy.filter(([b0, b1]) => overlaps(want, want + len, b0, b1));
-      const after = Math.max(...c.map((b) => b[1])), before = Math.min(...c.map((b) => b[0])) - len;
-      if (after <= hi && free(after, len)) at = after;
-      else if (before >= lo && free(before, len)) at = before;
+      const c = busy.filter(([b0, b1]) => overlaps(want, want + need, b0, b1));
+      const after = Math.max(...c.map((b) => b[1])), before = Math.min(...c.map((b) => b[0])) - need;
+      if (after <= hi && free(after, need)) at = after;
+      else if (before >= lo && free(before, need)) at = before;
+      else if (tail && free(want, len)) at = want; // no room for both: the meal still happens
     }
     if (at < 0) {
       out.push({ key: `f:${meal}`, start: want, end: want, title: `${title} out`, sub: "About 1 h · can't be home in the window", kind: 'note', meal, blocking: false });
       return -1;
     }
     out.push({ key: `f:${meal}`, start: at, end: at + len, title, sub: meal === 'dinner' && s.settings.dinnerNote ? `${len} min · ${s.settings.dinnerNote}` : `${len} min`, kind: 'meal', meal, blocking: true });
-    busy.push([at, at + len]);
+    const tailOk = tail > 0 && free(at + len, tail);
+    if (tailOk) tailFits.add(meal);
+    busy.push([at, at + len + (tailOk ? tail : 0)]);
     return at + len;
   };
-  const lunchEnd = place('lunch', day.lunchAt ?? st.lunchAt, day.lunchMin ?? st.lunchMin, 660, 870);
+  const lunchEnd = place('lunch', day.lunchAt ?? st.lunchAt, day.lunchMin ?? st.lunchMin, 660, 870, dish);
   // Cooking: a block right before dinner that turns into dinner when it's done.
   let dinnerWant = day.dinnerAt ?? learnedDinner(s, date) ?? st.dinnerAt;
   const fam = day.cook === 'family';
@@ -125,11 +132,11 @@ export function fixedBlocks(s: State, date: string): Block[] {
     out.push({ key: 'f:cook', start: cs, end: ce, title: fam ? 'Cooking for the family' : 'Cooking dinner', sub: day.cookEnd ? `${Math.round(ce - cs)} min` : `about ${cookLen} min · dinner right after`, kind: 'routine', blocking: true });
     busy.push([cs, ce]);
   }
-  const dinnerEnd = place('dinner', dinnerWant, day.dinnerMin ?? st.dinnerMin, 1020, 1230);
+  const dinnerEnd = place('dinner', dinnerWant, day.dinnerMin ?? st.dinnerMin, 1020, 1230, dish);
   const wd = weekday(date);
   if (st.dishDays.includes(wd)) {
-    if (lunchEnd > 0) out.push({ key: 'f:dishes1', start: lunchEnd, end: lunchEnd + st.dishesMin, title: 'Dishes', sub: 'After lunch · 15 to 30 min', kind: 'routine', blocking: true });
-    if (dinnerEnd > 0) out.push({ key: 'f:dishes2', start: dinnerEnd, end: dinnerEnd + st.dishesMin, title: 'Dishes', sub: 'After dinner · 15 to 30 min', kind: 'routine', blocking: true });
+    if (lunchEnd > 0 && (tailFits.has('lunch') || day.ate?.lunch)) out.push({ key: 'f:dishes1', start: lunchEnd, end: lunchEnd + st.dishesMin, title: 'Dishes', sub: 'After lunch · 15 to 30 min', kind: 'routine', blocking: true });
+    if (dinnerEnd > 0 && (tailFits.has('dinner') || day.ate?.dinner)) out.push({ key: 'f:dishes2', start: dinnerEnd, end: dinnerEnd + st.dishesMin, title: 'Dishes', sub: 'After dinner · 15 to 30 min', kind: 'routine', blocking: true });
   }
   out.push({ key: 'f:off', start: off, end: prep, title: 'Off Duty', sub: 'Protected · 2 h before bed', kind: 'offduty', blocking: true });
   out.push({ key: 'f:sleep', start: prep + 50, end: prep + 50 + 480, title: 'Asleep', sub: '8 h', kind: 'sleep', blocking: true });

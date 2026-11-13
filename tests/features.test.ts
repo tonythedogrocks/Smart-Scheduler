@@ -699,3 +699,16 @@ describe('false misses', () => {
     expect(realMisses(s, '2026-11-12')).toEqual([{ m: 'course-paper', at: 700 }]);
   });
 });
+
+describe('dishes after lunch', () => {
+  it('lunch moves earlier so dishes fit before leaving', async () => {
+    const { fixedBlocks } = await import('../src/model/schedule');
+    const s = sample();
+    const wd = new Date('2026-11-13T12:00').getDay();
+    s.settings.dishDays = [wd]; s.settings.lunchAt = 750; s.settings.lunchMin = 30; s.settings.dishesMin = 20;
+    s.events.push({ id: 'ev', title: 'Event', kind: 'event', start: 840, end: 1020, travel: 50, date: '2026-11-13' } as any);
+    const b = fixedBlocks(s, '2026-11-13');
+    const dishes = b.find((x) => x.key === 'f:dishes1')!, trip = b.find((x) => x.key === 'f:to:ev')!;
+    expect(dishes.end).toBeLessThanOrEqual(trip.start);
+  });
+});

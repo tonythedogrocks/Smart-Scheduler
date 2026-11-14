@@ -523,7 +523,8 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
         const away = fixed.filter((b) => b.kind === 'event' || b.kind === 'travel').map((b) => [b.start, b.end] as [number, number]);
         const bed = fixed.find((x) => x.kind === 'offduty')!.end;
         const home = (a: number, len: number) => !away.some(([x, y]) => a < y && x < a + len) && a + len <= bed;
-        for (let t = round5(nowMin); t + steps[steps.length - 1].at + steps[steps.length - 1].min <= bed; t += 5) {
+        const wake = fixed.find((x) => x.key === 'f:morning')!.start; // awake: never before he's up
+        for (let t = Math.max(round5(nowMin), wake); t + steps[steps.length - 1].at + steps[steps.length - 1].min <= bed; t += 5) {
           if (steps.every((st) => home(t + st.at, st.min))) { anchor = t; break; }
         }
       }

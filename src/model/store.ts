@@ -262,6 +262,8 @@ export const actions = {
   setDay(date: string, patch: Partial<State['days'][string]>) { mutate((s) => { s.days[date] = { ...(s.days[date] || {}), ...patch }; }); },
   setSettings(patch: Partial<State['settings']>) { mutate((s) => { s.settings = { ...s.settings, ...patch }; }); },
   addObjective(o: Omit<Objective, 'id'>) { const id = uid(); mutate((s) => { s.objectives.push({ ...o, id }); }); return id; },
+  /** Commit to a deadline: from now its daily share happens whatever the level (false to let it go). */
+  commit(id: string, on: boolean) { mutate((s) => { const o = s.objectives.find((x) => x.id === id); if (o) o.committed = on ? today() : undefined; }); },
   completeObjective(id: string, done: boolean) {
     let got: string[] = [];
     mutate((s) => { const o = s.objectives.find((x) => x.id === id); if (!o) return; o.done = done; o.doneAt = done ? today() : undefined; got = unlock(s, today()); });

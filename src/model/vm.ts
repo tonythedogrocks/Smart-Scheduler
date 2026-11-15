@@ -58,7 +58,7 @@ function dayIssue(s: State, fc: Forecast, date: string, now: number): { issue: I
     if (isTomorrow && !lv) chapters[0].panels.push({ key: 'draft', h: 'PLANNED AHEAD', t: `Planned at ${nice(levelName(Math.round(pl)))} (level ${Math.round(pl)})`, m: 'It re-plans when you report in tomorrow.', wide: true, act: 'info', fixed: true });
     if (isBackupDay(s, date)) chapters[0].panels.push({ key: 'backup', h: 'BACKUP', t: `Backup work day`, m: `This ${s.settings.restDayName} is planned like a normal day.`, wide: true, act: 'backup', date });
     const must = isToday ? mustSet(s, items, today, now) : new Set<string>();
-    for (const it of items) { const p = itemPanel(s, it, date, isToday); if (must.has(it.key)) p.must = true; chapters[partOf(it.start % 1440 < 300 ? 1439 : it.start)].panels.push(p); }
+    for (const it of items) { const p = itemPanel(s, it, date, isToday); if (must.has(it.key) || (it.commit && !it.done)) p.must = true; chapters[partOf(it.start % 1440 < 300 ? 1439 : it.start)].panels.push(p); }
     chapters.forEach((c) => { if (!c.panels.length) c.panels.push({ key: 'open', h: 'OPEN', t: 'Nothing queued', m: 'Rest counts too.', wide: true, act: 'info' }); });
     sub = sab ? restName : lv ? `Level ${lv} · ${nice(levelName(lv))}` : isTomorrow ? 'Planned ahead' : 'Level not set yet';
   } else if (date < today) {

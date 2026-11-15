@@ -794,3 +794,24 @@ describe('done earlier', () => {
     expect(S().missions.find((m) => m.id === 'course-lessons')!.unitsLeft).toBe(before - 1);
   });
 });
+
+describe('committing to a deadline', () => {
+  it("today's share is planned even at level 1, marked, and split evenly to the safe date", () => {
+    const s = sample();
+    s.days['2026-11-12'] = { level: 1, morningEnd: at('2026-11-12T09:00') };
+    const now = at('2026-11-12T09:00');
+    const before = forecast(s, now);
+    const o = s.objectives.find((x) => x.id === 'cert')!;
+    o.committed = '2026-11-12'; s.updatedAt = Math.random();
+    const fc = forecast(s, now);
+    const c = fc.commits.find((x) => x.objectiveId === 'cert')!;
+    expect(c.today).toBeGreaterThan(0);
+    const mine = fc.days[0].blocks.filter((b) => b.commit);
+    expect(mine.length).toBeGreaterThan(0);
+    const got = mine.reduce((a, b) => a + b.min, 0);
+    expect(Math.abs(got - c.today)).toBeLessThanOrEqual(45); // whole units of its tasks
+    const items = layoutDay(s, fc, '2026-11-12', now).filter((i) => i.commit);
+    expect(items.length).toBeGreaterThan(0);
+    expect(before.days[0].blocks.some((b) => b.commit)).toBe(false);
+  });
+});

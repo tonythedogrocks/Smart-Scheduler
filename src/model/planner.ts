@@ -4,18 +4,20 @@ import { energyBetween, predictedCurve, realMisses } from './energy';
 import { eatingNow, eventsOn, fixedBlocks, freeSlots, isRest, sunTimes, type Block } from './schedule';
 import { afterStats, weekdayFactor, learnedLevel, capacityAt, choreDue, exerciseCeiling, exerciseMinWeek, factor, flareSpike, isExercise, partOf, predictLevel, workMinOn } from './learn';
 
-export interface Alloc { missionId: string; units: number; baseMin: number; min: number; habit?: boolean; clock?: boolean; deadline?: boolean; must?: boolean }
+export interface Alloc { missionId: string; units: number; baseMin: number; min: number; habit?: boolean; clock?: boolean; deadline?: boolean; must?: boolean; commit?: boolean }
 export interface DayAlloc { date: string; level: number; rest: boolean; blocks: Alloc[]; capMin: number; deadlineMin: number; lock: boolean }
 /** Lock-in: deadlines need more than a comfortable day. Which one, roughly how much a day, until when. */
 export interface LockIn { objectiveId: string; title: string; perDay: number; until: string; today: number; comfort: number; late: string[] }
 export interface Risk { objectiveId: string; title: string; due: string; lands: string | null; note?: string }
-export interface Forecast { today: string; days: DayAlloc[]; landing: Record<string, string | null>; risks: Risk[]; eased: boolean; lockIn: LockIn | null }
+/** A deadline he committed to: today's share of what's left, and how much of it he's done today. */
+export interface Commit { objectiveId: string; title: string; today: number; done: number; until: string }
+export interface Forecast { today: string; days: DayAlloc[]; landing: Record<string, string | null>; risks: Risk[]; eased: boolean; lockIn: LockIn | null; commits: Commit[] }
 
 export interface PlanItem {
   key: string; start: number; end: number; title: string; sub?: string; detail?: string;
   kind: 'mission' | 'fixed';
   missionId?: string; units?: number; baseMin?: number; min?: number; step?: number;
-  done?: boolean; running?: boolean; now?: boolean; past?: boolean;
+  done?: boolean; running?: boolean; now?: boolean; past?: boolean; commit?: boolean;
   block?: Block;
 }
 
@@ -178,7 +180,13 @@ export function forecast(s: State, now: number): Forecast {
     const buffer = Math.max(1, Math.round(0.1 * Math.max(0, dueIdx)));
     safeOf.set(o.id, Math.max(0, dueIdx - buffer - maxTail));
   }
-  const order = [...deadlineObjs].sort((x, y) => safeOf.get(x.id)! - safeOf.get(y.id)!);
+  const isCommitted = (o: Objective) => !!o.committed && !o.done;
+  // sooner deadlines first; a committed one gets its even share out of what's left of the day
+  const order = [...deadlineObjs].sort((x, y) => safeOf.get(x.id)! - safeOf.get(y.id)! || Number(isCommitted(y)) - Number(isCommitted(x)));
+  /** Work days from day t through the safe date (at least 1). */
+  const workDaysTo = (t: number, safe: number) => { let n = 0; for (let j = t; j <= Math.min(Math.max(safe, t), H); j++) if (!infos[j].rest) n++; return Math.max(1, n + Math.max(0, safe - H)); };
+  /** Minutes already logged today on an objective. */
+  const doneTodayOn = (oid: string) => s.logs.filter((l) => l.date === today && l.end > 0 && byId.get(l.missionId)?.objectiveId === oid).reduce((a, l) => a + (l.end - l.start) / 60000, 0);
   const avgW = infos.reduce((a, d) => a + d.weight, 0) / Math.max(1, infos.length);
 
   interface Sim { units: Map<string, number>; doneIdx: Map<string, number>; days: { blocks: Alloc[]; deadline: number; perObj: Map<string, number> }[] }
@@ -196,27 +204,35 @@ export function forecast(s: State, now: number): Forecast {
     const out: Sim['days'] = [];
     for (let t = 0; t <= H; t++) {
       const d = infos[t];
-      let left = realPace ? Math.min(d.avail, d.pace) : d.avail;
+      // committed work comes out of the whole free day; everything else, at real pace, only out of what he really does
+      let used = 0, usedOther = 0, left = 0;
       const blocks: Alloc[] = [], perObj = new Map<string, number>();
       for (const o of order) {
         const rem = remaining(o.id);
         if (rem <= 0) continue;
+        const committed = isCommitted(o);
+        left = committed || !realPace ? d.avail - used : Math.min(d.avail - used, d.pace - usedOther);
         const dueIdx = diffDays(today, o.due!);
-        // Recovery day today: only work due within a day, or at risk
-        if (t === 0 && d.level < 1.5 && dueIdx > 1 && !riskSet.has(o.id)) continue;
+        // Recovery day today: only work due within a day, at risk, or committed
+        if (t === 0 && d.level < 1.5 && dueIdx > 1 && !riskSet.has(o.id) && !committed) continue;
         const ready = () => live.filter((m) => m.objectiveId === o.id && m.kind === 'work' && !m.errand && (units.get(m.id) || 0) > 0 && available(m, t) && (!d.rest || m.restOk))
           .sort((a, b) => Number(!!b.clock) - Number(!!a.clock) || tail(b) - tail(a));
         if (!ready().length) continue;
         const safe = safeOf.get(o.id)!;
         let share: number;
-        if (t >= safe) share = rem;
+        if (committed) {
+          // committed: an even share of what's left over the work days to the safe date (today counts what's done already)
+          if (d.rest) continue;
+          share = t === 0 ? Math.max(0, (rem + doneTodayOn(o.id)) / workDaysTo(0, safe) - doneTodayOn(o.id)) : rem / workDaysTo(t, safe);
+        } else if (t >= safe) share = rem;
         else {
           let denom = 0;
           for (let j = t; j <= Math.min(safe, H); j++) denom += infos[j].weight;
           if (safe > H) denom += (safe - H) * avgW;
           share = denom > 0 ? (rem * d.weight) / denom : rem;
         }
-        share = Math.min(left, share * (boost.get(o.id) || 1));
+        share = Math.min(left, share * (committed ? 1 : boost.get(o.id) || 1));
+        const left0 = left;
         let ow = Math.min(rem, (owed.get(o.id) || 0) + share);
         // keep going down the chain the same day: finishing one step can unlock the next
         for (let progressed = true; progressed;) {
@@ -229,7 +245,7 @@ export function forecast(s: State, now: number): Forecast {
               let u = Math.max(1, Math.min(m.maxBlockUnits || 3, lft, Math.floor((ow + u1 * 0.5) / u1), Math.floor((left + u1 * 0.5) / u1)));
               if (m.labels?.length) { const at0 = m.labels.length - lft; while (u < lft && m.labels[at0 + u] === m.labels[at0 + u - 1]) u++; }
               const min = Math.round(u * u1);
-              blocks.push({ missionId: m.id, units: u, baseMin: u * m.minutes, min, clock: m.clock, deadline: true });
+              blocks.push({ missionId: m.id, units: u, baseMin: u * m.minutes, min, clock: m.clock, deadline: true, ...(committed ? { commit: true } : {}) });
               ow -= min; left -= min; progressed = true;
               perObj.set(o.id, (perObj.get(o.id) || 0) + min);
               units.set(m.id, lft - u);
@@ -238,8 +254,9 @@ export function forecast(s: State, now: number): Forecast {
           }
         }
         owed.set(o.id, Math.max(0, Math.min(ow, rem)));
+        const spent = left0 - left; used += spent; if (!committed) usedOther += spent;
       }
-      out.push({ blocks, deadline: d.avail - left, perObj });
+      out.push({ blocks, deadline: used, perObj });
     }
     return { units, doneIdx, days: out };
   };
@@ -385,8 +402,9 @@ export function forecast(s: State, now: number): Forecast {
     // the objective taking the most deadline time over the coming week
     const share = new Map<string, number>();
     for (let t = 0; t < Math.min(7, sim.days.length); t++) for (const [id, v] of sim.days[t].perObj) share.set(id, (share.get(id) || 0) + v);
-    const top = [...share.entries()].sort((a, b) => b[1] - a[1])[0];
-    const o = top ? s.objectives.find((x) => x.id === top[0]) : risks[0] && s.objectives.find((x) => x.id === risks[0].objectiveId);
+    // committed deadlines have their own card: lock-in is about the rest
+    const top = [...share.entries()].filter(([id]) => !isCommitted(s.objectives.find((o) => o.id === id)!)).sort((a, b) => b[1] - a[1])[0];
+    const o = top ? s.objectives.find((x) => x.id === top[0]) : risks.find((r) => !isCommitted(s.objectives.find((x) => x.id === r.objectiveId)!)) && s.objectives.find((x) => x.id === risks.find((r) => !isCommitted(s.objectives.find((y) => y.id === r.objectiveId)!))!.objectiveId);
     if (o) {
       const safe = Math.min(safeOf.get(o.id) ?? 0, H);
       let tot = 0, n = 0;
@@ -394,7 +412,12 @@ export function forecast(s: State, now: number): Forecast {
       lockIn = { objectiveId: o.id, title: o.title, perDay: Math.round(tot / Math.max(1, n)), until: addDays(today, safe), today: Math.round(sim.days[0].deadline), comfort: Math.round(infos[0].comfort), late: risks.map((r) => r.title) };
     }
   }
-  const v = { today, days, landing, risks, eased, lockIn };
+  const commits: Commit[] = deadlineObjs.filter(isCommitted).map((o) => {
+    const rem0 = live.filter((m) => m.objectiveId === o.id && m.kind === 'work').reduce((a, m) => a + (units0.get(m.id) || 0) * unit(m), 0);
+    const done = doneTodayOn(o.id), safe = safeOf.get(o.id)!;
+    return { objectiveId: o.id, title: o.title, today: infos[0].rest ? 0 : Math.round((rem0 + done) / workDaysTo(0, safe)), done: Math.round(done), until: addDays(today, safe) };
+  }).filter((c) => c.today > 0 || c.done > 0);
+  const v = { today, days, landing, risks, eased, lockIn, commits };
   memo = { k, v };
   return v;
 }
@@ -587,7 +610,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   }
   // deadline work due sooner gets first pick of the day
   const dueOf = (x: Alloc) => (x.deadline ? s.objectives.find((o) => o.id === byId.get(x.missionId)?.objectiveId)?.due || '9999' : '9999');
-  const order = blocks.sort((a, b) => Number(!!b.must && !b.habit) - Number(!!a.must && !a.habit) || Number(!!b.habit) - Number(!!a.habit) || Number(!!b.must) - Number(!!a.must) || dueOf(a).localeCompare(dueOf(b)) || hardness(b) - hardness(a));
+  const order = blocks.sort((a, b) => Number(!!b.must && !b.habit) - Number(!!a.must && !a.habit) || Number(!!b.habit) - Number(!!a.habit) || Number(!!b.must) - Number(!!a.must) || dueOf(a).localeCompare(dueOf(b)) || Number(!!b.commit) - Number(!!a.commit) || hardness(b) - hardness(a));
   const sun = s.settings.sun ? sunTimes(date, s.settings.sun.lat, s.settings.sun.lon) : null;
   /** Every start (5-min steps) that fits, scored by predicted energy; hard work takes the best, light work the dips. */
   const pick = (len: number, lo: number, fb: [number, number][], hi: number, light: boolean, outdoor = false, asap = false): { i: number; a: number } | null => {
@@ -630,7 +653,9 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     const soft: [number, number][] = [];
     if (bad) for (const it of items) { const c = catOf(it); if (c && bad.has(c)) soft.push([it.end, it.end + 45]); }
     let got: { i: number; a: number } | null = null;
-    const urgent = !a.habit && dueOf(a) !== '9999' && diffDays(date, dueOf(a)) <= 2;
+    // committed work gets his peak hours; once he's missed one today it's simply first in line until it's done
+    const missedToday = isToday && realMisses(s, date).some((x) => x.m === m.id);
+    const urgent = !a.habit && ((dueOf(a) !== '9999' && diffDays(date, dueOf(a)) <= 2) || (!!a.commit && missedToday));
     const light = (!!a.habit || m.energy === 'none') && !a.must;
     for (const fb of soft.length ? [[...forbid, ...soft], forbid] : [forbid]) {
       got = pick(a.min, lo, fb, hi, light, !!m.outdoor, urgent);
@@ -644,7 +669,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
       }
       const skip = usedUnits.get(m.id) || 0;
       usedUnits.set(m.id, skip + units);
-      items.push({ key: keyFor(m.id), start: at, end: at + len, title: a.habit ? habitTitle(m, level) : m.title, sub: label(m, len, units, skip), detail: detailOf(s, m, skip), kind: 'mission', missionId: m.id, units, baseMin: Math.round(a.baseMin * units / Math.max(1, a.units)), min: len });
+      items.push({ key: keyFor(m.id), start: at, end: at + len, title: a.habit ? habitTitle(m, level) : m.title, sub: label(m, len, units, skip), detail: detailOf(s, m, skip), kind: 'mission', missionId: m.id, units, baseMin: Math.round(a.baseMin * units / Math.max(1, a.units)), min: len, ...(a.commit ? { commit: true } : {}) });
     };
     if (got) { placeAt(got.a, a.units, a.min); continue; }
     // Doesn't fit whole: split goal work across the gaps that are left (pieces of 15 min or more), instead of dropping it.

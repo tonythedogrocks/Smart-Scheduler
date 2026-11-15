@@ -73,7 +73,7 @@ export function App() {
     const sig = planSig(S(), today);
     if (d.plan?.sig === sig) return;
     const items: PlanSnap[] = lib.todayItems.filter((i) => i.kind === 'mission' && !i.done && !i.running && i.missionId)
-      .map((i) => ({ key: i.key, missionId: i.missionId!, start: i.start, end: i.end, title: i.title, sub: i.sub, detail: i.detail, units: i.units, baseMin: i.baseMin, min: i.min, step: i.step }));
+      .map((i) => ({ key: i.key, missionId: i.missionId!, start: i.start, end: i.end, title: i.title, sub: i.sub, detail: i.detail, units: i.units, baseMin: i.baseMin, min: i.min, step: i.step, ...(i.commit ? { commit: true } : {}) }));
     actions.savePlan(sig, items);
   });
   // Missed: a planned block still unstarted 5 minutes after its time. Log it (feeds the energy model) and the day re-plans.
@@ -138,6 +138,12 @@ export function App() {
                     <Arrow size={26} />
                   </button>
                 )}
+                {lib.fc.commits.map((c) => (
+                  <div class="alert lock">
+                    <span class="k">COMMITTED: {c.title}</span>
+                    <span>{c.done >= c.today ? `Today's share is done (${fmtDur(c.done)}).` : `Today: about ${fmtDur(c.today)}${c.done ? `, ${fmtDur(c.done)} done` : ''}.`} Every work day until {fmtDate(c.until)}. Its blocks are marked MUST.</span>
+                  </div>
+                ))}
                 {lib.fc.lockIn && (() => {
                   const li = lib.fc.lockIn!, o = s.objectives.find((x) => x.id === li.objectiveId);
                   return (
@@ -147,13 +153,18 @@ export function App() {
                     </button>
                   );
                 })()}
-                {!lib.fc.lockIn && risks.slice(0, 1).map((r) => {
+                {risks.filter((r) => !s.objectives.find((x) => x.id === r.objectiveId)?.committed).slice(0, 1).map((r) => {
                   const o = s.objectives.find((x) => x.id === r.objectiveId)!;
+                  const more = risks.filter((x) => !s.objectives.find((y) => y.id === x.objectiveId)?.committed).length - 1;
                   return (
-                    <button type="button" class="alert" onClick={() => go({ view: 'page', c: o.skillId, i: o.id, ch: 0, p: 'deadline' })}>
+                    <div class="alert">
                       <span class="k">HEADS UP: {r.title}</span>
-                      <span>{r.lands ? `At a modest pace this lands about ${fmtDate(r.lands)}, past ${fmtDate(r.due)}.` : `At a modest pace this misses ${fmtDate(r.due)}.`} Good days pull it in.{risks.length > 1 ? ` ${risks.length - 1} more at risk.` : ''}</span>
-                    </button>
+                      <span>{r.lands ? `At your usual pace this lands about ${fmtDate(r.lands)}, past ${fmtDate(r.due)}.` : `At your usual pace this misses ${fmtDate(r.due)}.`} Commit, and its daily share happens whatever your level.{more > 0 ? ` ${more} more at risk.` : ''}</span>
+                      <div class="row" style="margin-top:6px">
+                        <button type="button" class="small on" onClick={() => actions.commit(o.id, true)}>COMMIT</button>
+                        <button type="button" class="small" onClick={() => go({ view: 'page', c: o.skillId, i: o.id, ch: 0, p: 'deadline' })}>Details</button>
+                      </div>
+                    </div>
                   );
                 })}
               </div>

@@ -180,7 +180,9 @@ export function forecast(s: State, now: number): Forecast {
     const buffer = Math.max(1, Math.round(0.1 * Math.max(0, dueIdx)));
     safeOf.set(o.id, Math.max(0, dueIdx - buffer - maxTail));
   }
-  const isCommitted = (o: Objective) => !!o.committed && !o.done;
+  // lock-in: a deadline that won't land at his usual pace is locked in automatically (see 3b)
+  const autoLock = new Set<string>();
+  const isCommitted = (o: Objective) => (!!o.committed || autoLock.has(o.id)) && !o.done;
   // sooner deadlines first; a committed one gets its even share out of what's left of the day
   const order = [...deadlineObjs].sort((x, y) => safeOf.get(x.id)! - safeOf.get(y.id)! || Number(isCommitted(y)) - Number(isCommitted(x)));
   /** Work days from day t through the safe date (at least 1). */
@@ -318,9 +320,12 @@ export function forecast(s: State, now: number): Forecast {
 
   // ---- 3b. The honest check: at the pace he really works, does each deadline still land in time?
   // Anything that doesn't is at risk (and gets planned even on a Recovery day).
-  const real = simulate(new Map(), new Set(), true);
+  // Anything that wouldn't is locked in: its even daily share is planned whatever his level.
+  let real = simulate(new Map(), new Set(), true);
+  for (const id of late(real)) autoLock.add(id);
+  if (autoLock.size) { sim = simulate(boost, new Set([...risky, ...autoLock])); real = simulate(new Map(), new Set(), true); }
+  // what's still late even locked in (not enough days left) is a real risk
   const realLate = late(real);
-  if ([...realLate].some((id) => !risky.has(id))) sim = simulate(boost, new Set([...risky, ...realLate]));
 
   // ---- 4. Compose each day: routines, deadline work, then flexible goals in the comfortable room left.
   const exUsed = new Map<string, number>();
@@ -416,7 +421,7 @@ export function forecast(s: State, now: number): Forecast {
     const rem0 = live.filter((m) => m.objectiveId === o.id && m.kind === 'work').reduce((a, m) => a + (units0.get(m.id) || 0) * unit(m), 0);
     const done = doneTodayOn(o.id), safe = safeOf.get(o.id)!;
     return { objectiveId: o.id, title: o.title, today: infos[0].rest ? 0 : Math.round((rem0 + done) / workDaysTo(0, safe)), done: Math.round(done), until: addDays(today, safe) };
-  }).filter((c) => c.today > 0 || c.done > 0);
+  });
   const v = { today, days, landing, risks, eased, lockIn, commits };
   memo = { k, v };
   return v;

@@ -138,24 +138,23 @@ export function App() {
                     <Arrow size={26} />
                   </button>
                 )}
-                {lib.fc.commits.map((c) => (
-                  <div class="alert lock">
-                    <span class="k">COMMITTED: {c.title}</span>
-                    <span>{c.done >= c.today ? `Today's share is done (${fmtDur(c.done)}).` : `Today: about ${fmtDur(c.today)}${c.done ? `, ${fmtDur(c.done)} done` : ''}.`} Every work day until {fmtDate(c.until)}. Its blocks are marked MUST.</span>
-                  </div>
-                ))}
-                {risks.filter((r) => !s.objectives.find((x) => x.id === r.objectiveId)?.committed).slice(0, 1).map((r) => {
-                  const o = s.objectives.find((x) => x.id === r.objectiveId)!;
-                  const more = risks.filter((x) => !s.objectives.find((y) => y.id === x.objectiveId)?.committed).length - 1;
+                {lib.fc.commits.length > 0 && (() => {
+                  const cs = lib.fc.commits, tot = cs.reduce((a, c) => a + c.today, 0), done = cs.reduce((a, c) => a + Math.min(c.done, c.today), 0);
                   return (
-                    <div class="alert">
-                      <span class="k">HEADS UP: {r.title}</span>
-                      <span>{r.lands ? `At your usual pace this lands about ${fmtDate(r.lands)}, past ${fmtDate(r.due)}.` : `At your usual pace this misses ${fmtDate(r.due)}.`} Commit, and its daily share happens whatever your level.{more > 0 ? ` ${more} more at risk.` : ''}</span>
-                      <div class="row" style="margin-top:6px">
-                        <button type="button" class="small on" onClick={() => actions.commit(o.id, true)}>COMMIT</button>
-                        <button type="button" class="small" onClick={() => go({ view: 'page', c: o.skillId, i: o.id, ch: 0, p: 'deadline' })}>Details</button>
-                      </div>
+                    <div class="alert lock">
+                      <span class="k">LOCK IN</span>
+                      <span>{tot === 0 ? 'Nothing today (rest day).' : done >= tot ? `Today's share is done.` : `Today: about ${fmtDur(tot - done)} left${done ? ` (${fmtDur(done)} done)` : ''}, whatever your level. Those blocks are marked MUST.`}</span>
+                      {cs.map((c) => <span style="font-size:14px">{c.title}{c.today ? ` · ${fmtDur(c.today)} today` : ''} · until {fmtDate(c.until)}</span>)}
                     </div>
+                  );
+                })()}
+                {risks.slice(0, 1).map((r) => {
+                  const o = s.objectives.find((x) => x.id === r.objectiveId)!;
+                  return (
+                    <button type="button" class="alert" onClick={() => go({ view: 'page', c: o.skillId, i: o.id, ch: 0, p: 'deadline' })}>
+                      <span class="k">HEADS UP: {r.title}</span>
+                      <span>{r.lands ? `Even locked in, this lands about ${fmtDate(r.lands)}, past ${fmtDate(r.due)}.` : `Even locked in, this misses ${fmtDate(r.due)}.`}{risks.length > 1 ? ` ${risks.length - 1} more at risk.` : ''}</span>
+                    </button>
                   );
                 })}
               </div>

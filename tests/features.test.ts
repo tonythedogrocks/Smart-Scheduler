@@ -795,24 +795,24 @@ describe('done earlier', () => {
   });
 });
 
-describe('committing to a deadline', () => {
-  it("today's share is planned even at level 1, marked, and split evenly to the safe date", () => {
+describe('lock in', () => {
+  it("a deadline that won't land at his usual pace is locked in: its daily share is planned even at level 1, marked", () => {
     const s = sample();
     s.days['2026-11-12'] = { level: 1, morningEnd: at('2026-11-12T09:00') };
     const now = at('2026-11-12T09:00');
-    const before = forecast(s, now);
-    const o = s.objectives.find((x) => x.id === 'cert')!;
-    o.committed = '2026-11-12'; s.updatedAt = Math.random();
     const fc = forecast(s, now);
-    const c = fc.commits.find((x) => x.objectiveId === 'cert')!;
-    expect(c.today).toBeGreaterThan(0);
+    expect(fc.commits.length).toBeGreaterThan(0);
+    const c = fc.commits[0];
     const mine = fc.days[0].blocks.filter((b) => b.commit);
     expect(mine.length).toBeGreaterThan(0);
-    const got = mine.reduce((a, b) => a + b.min, 0);
-    expect(Math.abs(got - c.today)).toBeLessThanOrEqual(45); // whole units of its tasks
-    const items = layoutDay(s, fc, '2026-11-12', now).filter((i) => i.commit);
-    expect(items.length).toBeGreaterThan(0);
-    expect(before.days[0].blocks.some((b) => b.commit)).toBe(false);
+    expect(Math.abs(mine.filter((b) => s.missions.find((m) => m.id === b.missionId)!.objectiveId === c.objectiveId).reduce((a, b) => a + b.min, 0) - c.today)).toBeLessThanOrEqual(45);
+    expect(layoutDay(s, fc, '2026-11-12', now).some((i) => i.commit)).toBe(true);
+  });
+  it('nothing is locked in when everything lands at his usual pace', () => {
+    const s = sample();
+    for (const o of s.objectives) o.due = undefined;
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
+    expect(forecast(s, at('2026-11-12T09:00')).commits.length).toBe(0);
   });
 });
 

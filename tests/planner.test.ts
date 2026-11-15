@@ -35,7 +35,7 @@ describe('planner', () => {
     const s = fresh(1);
     const fc = forecast(s, at('2026-11-11T09:00'));
     // routines, plus only deadline work that's at risk or due within a day (lock-in: it happens regardless of how he feels)
-    const atRisk = new Set(fc.risks.map((r) => r.objectiveId));
+    const atRisk = new Set([...fc.risks.map((r) => r.objectiveId), ...fc.commits.map((c) => c.objectiveId)]);
     for (const b of fc.days[0].blocks.filter((x) => !x.habit)) {
       const o = s.objectives.find((x) => x.id === s.missions.find((m) => m.id === b.missionId)!.objectiveId)!;
       expect(atRisk.has(o.id) || (o.due && o.due <= '2026-11-12')).toBeTruthy();

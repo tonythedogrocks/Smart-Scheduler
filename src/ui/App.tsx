@@ -285,14 +285,6 @@ export function App() {
       </div>
 
       <div class="bottombar">
-        <button type="button" onClick={() => actions.flare()}>
-          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="#D92B21" stroke="#14110F" stroke-width="2" stroke-linejoin="round"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6z" /></svg>
-          <span>{s.settings.flareLabel}</span>
-        </button>
-        <button type="button" onClick={() => setLocal({ sheet: 'doing' })}>
-          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#14110F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg>
-          <span>Doing now</span>
-        </button>
         <button type="button" class="add" aria-label="Add a shift, workout, event or Objective" onClick={() => setLocal({ sheet: 'add', sheetArg: undefined })}>
           <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
         </button>

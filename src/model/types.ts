@@ -104,7 +104,7 @@ export interface Settings {
   cookFamilyMin: number;    // first guess for cooking for the family; learned separately
   flareLabel: string;
   shift: { title: string; travel: number; lengths: number[]; bike?: boolean };
-  backupWeeks: string[];    // weeks (Monday dates) where the rest day is a backup work day
+  backupWeeks: string[];    // weeks (their Sunday dates) where the rest day is a backup work day
   sun?: { lat: number; lon: number }; // for sunrise/sunset (daylight-only missions)
   workoutTitle: string;
   acronyms: string[];       // words kept in capitals in titles

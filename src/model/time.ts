@@ -9,7 +9,7 @@ export const addDays = (s: string, n: number) => { const d = parseD(s); d.setDat
 export const diffDays = (a: string, b: string) => Math.round((parseD(b).getTime() - parseD(a).getTime()) / 86400000);
 export const weekday = (s: string) => parseD(s).getDay();
 export const minsOf = (ts: number) => { const d = new Date(ts); return d.getHours() * 60 + d.getMinutes(); };
-export const weekStart = (s: string) => addDays(s, -((weekday(s) + 6) % 7)); // Monday
+export const weekStart = (s: string) => addDays(s, -weekday(s)); // weeks start on Sunday
 export const fmtT = (min: number) => { const m = ((Math.round(min) % 1440) + 1440) % 1440; const h = Math.floor(m / 60); return `${((h + 11) % 12) + 1}:${p2(m % 60)}`; };
 export const fmtTp = (min: number) => `${fmtT(min)}${(((Math.round(min) % 1440) + 1440) % 1440) < 720 ? 'am' : 'pm'}`;
 const WD = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];

@@ -256,8 +256,8 @@ export const actions = {
     toast('Dinner time. Enjoy it.');
   },
   /** Make a week's rest day a backup work day, or turn that back off. */
-  toggleBackup(weekMonday: string) {
-    mutate((s) => { const w = new Set(s.settings.backupWeeks || []); if (w.has(weekMonday)) w.delete(weekMonday); else w.add(weekMonday); s.settings.backupWeeks = [...w].sort().slice(-8); });
+  toggleBackup(weekStartDate: string) {
+    mutate((s) => { const w = new Set(s.settings.backupWeeks || []); if (w.has(weekStartDate)) w.delete(weekStartDate); else w.add(weekStartDate); s.settings.backupWeeks = [...w].sort().slice(-8); });
   },
   setDay(date: string, patch: Partial<State['days'][string]>) { mutate((s) => { s.days[date] = { ...(s.days[date] || {}), ...patch }; }); },
   setSettings(patch: Partial<State['settings']>) { mutate((s) => { s.settings = { ...s.settings, ...patch }; }); },

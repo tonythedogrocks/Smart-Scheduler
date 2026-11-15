@@ -144,15 +144,6 @@ export function App() {
                     <span>{c.done >= c.today ? `Today's share is done (${fmtDur(c.done)}).` : `Today: about ${fmtDur(c.today)}${c.done ? `, ${fmtDur(c.done)} done` : ''}.`} Every work day until {fmtDate(c.until)}. Its blocks are marked MUST.</span>
                   </div>
                 ))}
-                {lib.fc.lockIn && (() => {
-                  const li = lib.fc.lockIn!, o = s.objectives.find((x) => x.id === li.objectiveId);
-                  return (
-                    <button type="button" class="alert lock" onClick={() => o && go({ view: 'toc', c: o.skillId, i: o.id, ch: 0, p: '' })}>
-                      <span class="k">LOCK IN: {li.title}</span>
-                      <span>Your deadlines need more than a comfortable day{li.today > li.comfort ? ` (today about ${fmtDur(li.today)}, comfortable is about ${fmtDur(li.comfort)})` : ''}. About {fmtDur(li.perDay)} a day on this one until {fmtDate(li.until)}.{li.late.length ? ` Even then, ${li.late.length === 1 ? 'one deadline' : `${li.late.length} deadlines`} may land late.` : ''}</span>
-                    </button>
-                  );
-                })()}
                 {risks.filter((r) => !s.objectives.find((x) => x.id === r.objectiveId)?.committed).slice(0, 1).map((r) => {
                   const o = s.objectives.find((x) => x.id === r.objectiveId)!;
                   const more = risks.filter((x) => !s.objectives.find((y) => y.id === x.objectiveId)?.committed).length - 1;

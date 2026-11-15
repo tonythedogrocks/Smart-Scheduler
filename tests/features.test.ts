@@ -265,7 +265,7 @@ describe('V1 features', () => {
     const { isRest } = await import('../src/model/schedule');
     const s = sample();
     expect(isRest(s, '2026-11-15')).toBe(true);
-    s.settings.backupWeeks = ['2026-11-09'];
+    s.settings.backupWeeks = ['2026-11-15']; // weeks start on Sunday
     expect(isRest(s, '2026-11-15')).toBe(false);
   });
   it('learns the usual dinner time from Dinner now taps', async () => {
@@ -813,5 +813,14 @@ describe('committing to a deadline', () => {
     const items = layoutDay(s, fc, '2026-11-12', now).filter((i) => i.commit);
     expect(items.length).toBeGreaterThan(0);
     expect(before.days[0].blocks.some((b) => b.commit)).toBe(false);
+  });
+});
+
+describe('weeks', () => {
+  it('start on Sunday', async () => {
+    const { weekStart } = await import('../src/model/time');
+    expect(weekStart('2026-11-15')).toBe('2026-11-15');
+    expect(weekStart('2026-11-21')).toBe('2026-11-15');
+    expect(weekStart('2026-11-16')).toBe('2026-11-15');
   });
 });

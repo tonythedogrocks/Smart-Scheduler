@@ -824,3 +824,14 @@ describe('weeks', () => {
     expect(weekStart('2026-11-16')).toBe('2026-11-15');
   });
 });
+
+describe('meals at events', () => {
+  it('a meal eaten at an event is not planned at home', async () => {
+    const { fixedBlocks } = await import('../src/model/schedule');
+    const s = sample();
+    s.events.push({ id: 'out', title: 'Dinner out', kind: 'event', start: 1050, end: 1200, travel: 30, date: '2026-11-13', meals: ['dinner'] } as any);
+    const b = fixedBlocks(s, '2026-11-13');
+    expect(b.some((x) => x.kind === 'meal' && x.meal === 'dinner')).toBe(false);
+    expect(b.find((x) => x.key === 'f:dinner')!.title).toBe('Dinner at Dinner out');
+  });
+});

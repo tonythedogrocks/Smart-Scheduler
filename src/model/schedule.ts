@@ -96,6 +96,12 @@ export function fixedBlocks(s: State, date: string): Block[] {
   const place = (meal: 'lunch' | 'dinner', want: number, len: number, lo: number, hi: number, tail = 0) => {
     const title = meal === 'lunch' ? 'Lunch' : 'Dinner';
     // a confirmed meal sits exactly where it happened
+    // eaten at an event that day: no meal at home, just a note on the timeline
+    const evMeal = eventsOn(s, date).find((e) => e.meals?.includes(meal));
+    if (evMeal && !day.ate?.[meal]) {
+      out.push({ key: `f:${meal}`, start: evMeal.start, end: evMeal.start, title: `${title} at ${evMeal.title}`, sub: 'Eaten there', kind: 'note', meal, blocking: false });
+      return -1;
+    }
     const got = day.ate?.[meal];
     if (got) {
       const end = got.end !== undefined && got.end > got.at ? got.end : got.at + len;

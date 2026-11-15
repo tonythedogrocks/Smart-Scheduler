@@ -57,6 +57,7 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
               <span>START!</span>
             </button>
             {run && <span class="soft" style="font-size:14px;text-align:center">Another {sab ? 'task' : 'mission'} is in progress. Finish or stop it first.</span>}
+            {p.date === lib.today && !p.done && <Earlier p={p} />}
           </>
         )}
         {mine && run && (
@@ -198,5 +199,26 @@ function Steps({ labels, ticked }: { labels: string[]; ticked: number }) {
         );
       })}
     </ul>
+  );
+}
+
+/** Logging something after the fact, with the real times, so the app learns real lengths. */
+function Earlier({ p }: { p: PanelVM }) {
+  const [open, setOpen] = useState(false);
+  const now = new Date(nowTs()), nm = now.getHours() * 60 + now.getMinutes();
+  const len = p.min || p.baseMin || 10;
+  const [from, setFrom] = useState(Math.max(0, nm - len)), [to, setTo] = useState(nm);
+  if (!open) return <button type="button" class="plain" onClick={() => setOpen(true)}>I did this earlier</button>;
+  const box = 'height:44px;padding:0 8px;border:3px solid var(--ink);border-radius:6px;font-weight:700';
+  return (
+    <>
+      <div class="row">
+        <span style="font-size:15px">From</span>
+        <input type="time" aria-label="Started at" value={toHM(from)} style={box} onChange={(e) => { const v = (e.target as HTMLInputElement).value; if (v) setFrom(fromHM(v)); }} />
+        <span style="font-size:15px">to</span>
+        <input type="time" aria-label="Finished at" value={toHM(to)} style={box} onChange={(e) => { const v = (e.target as HTMLInputElement).value; if (v) setTo(fromHM(v)); }} />
+      </div>
+      <button type="button" class="big fin sm" disabled={to <= from} onClick={() => actions.doneEarlier(p.missionId!, p.units || 1, p.baseMin || len, from, to, p.step, p.key)}>SAVE</button>
+    </>
   );
 }

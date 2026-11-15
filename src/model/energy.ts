@@ -23,7 +23,7 @@ export function dayObservations(s: State, date: string): Map<number, number> {
   };
   const byId = new Map(s.missions.map((m) => [m.id, m]));
   for (const l of s.logs) {
-    if (l.date !== date || l.end <= l.start) continue;
+    if (l.date !== date || l.end - l.start < 60000) continue; // under a minute: tapped after the fact, no timing to learn
     const m = byId.get(l.missionId);
     if (!m || m.kind === 'chore') continue;
     const actual = Math.max(1, (l.end - l.start) / 60000);

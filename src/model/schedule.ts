@@ -9,7 +9,8 @@ export interface Block {
 }
 
 /** The weekly rest day: essentials only. */
-export const isRest = (s: State, date: string) => s.settings.restDay !== null && weekday(date) === s.settings.restDay && !(s.settings.backupWeeks || []).includes(weekStart(date));
+/** The rest day, unless it's a backup week or he reported level 3+ that morning (then it's a normal work day). */
+export const isRest = (s: State, date: string) => s.settings.restDay !== null && weekday(date) === s.settings.restDay && !(s.settings.backupWeeks || []).includes(weekStart(date)) && !((s.days[date]?.level ?? 0) >= 3);
 /** The rest day of a week that has been switched to a backup work day. */
 export const isBackupDay = (s: State, date: string) => s.settings.restDay !== null && weekday(date) === s.settings.restDay && (s.settings.backupWeeks || []).includes(weekStart(date));
 
@@ -178,7 +179,7 @@ export function eatingNow(s: State, date: string, nowMin: number): 'lunch' | 'di
 /** How long dishes really take: the median of the last ones he timed (3 or more), else the setting. */
 export function learnedDishes(s: State): number {
   const xs: number[] = [];
-  for (const d of Object.values(s.days || {})) for (const r of Object.values(d.dishes || {})) if (r && r.end !== undefined && r.end > r.start) xs.push((r.end - r.start) / 60000);
+  for (const d of Object.values(s.days || {})) for (const r of Object.values(d.dishes || {})) if (r && r.end !== undefined && r.end - r.start >= 60000) xs.push((r.end - r.start) / 60000);
   const last = xs.slice(-10).sort((a, b) => a - b);
   return last.length >= 3 ? Math.max(5, Math.round(last[Math.floor(last.length / 2)] / 5) * 5) : s.settings.dishesMin;
 }

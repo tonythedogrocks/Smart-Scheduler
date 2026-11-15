@@ -119,14 +119,14 @@ export function forecast(s: State, now: number): Forecast {
   };
 
   // ---- 1. Each day: free time, routines, comfortable capacity, predicted energy.
-  interface DayInfo { date: string; rest: boolean; level: number; avail: number; comfort: number; weight: number; routines: Alloc[] }
+  interface DayInfo { date: string; rest: boolean; level: number; avail: number; comfort: number; weight: number; routines: Alloc[]; pace: number }
   const last = new Map(live.filter((m) => m.kind === 'habit').map((m) => [m.id, lastDone(s, m.id)]));
   const infos: DayInfo[] = [];
   for (let t = 0; t <= H; t++) {
     const date = addDays(today, t);
     const rest = isRest(s, date);
     const real = s.days[date]?.level;
-    const level = t === 0 && real ? real : predictLevel(s, date, today);
+    const level = rest ? 1 : t === 0 && real ? real : predictLevel(s, date, today);
     const paceLevel = t === 0 || real ? level : learnedLevel(s, date, today);
     const fixed = fixedBlocks(s, date);
     const from = t === 0 ? round5(minsOf(now)) : 0;
@@ -164,7 +164,9 @@ export function forecast(s: State, now: number): Forecast {
     // day looks (its room, its timeline) uses the optimistic preview level.
     const paceComfort = t === 0 || real ? comfort : Math.min(avail, capacityAt(s, paceLevel, today) * weekdayFactor(s, today, weekday(date)));
     const weight = rest || avail <= 0 ? 0 : Math.max(paceComfort, avail * 0.25) * span;
-    infos.push({ date, rest, level, avail, comfort, weight, routines });
+    // what he really gets done on a day like this (today: what's left of a comfortable day)
+    const pace = rest ? 0 : t === 0 ? comfort : paceComfort;
+    infos.push({ date, rest, level, avail, comfort, weight, routines, pace });
   }
 
   // ---- 2. Deadline work: paced across the whole horizon toward a safe date before each due date.
@@ -180,7 +182,8 @@ export function forecast(s: State, now: number): Forecast {
   const avgW = infos.reduce((a, d) => a + d.weight, 0) / Math.max(1, infos.length);
 
   interface Sim { units: Map<string, number>; doneIdx: Map<string, number>; days: { blocks: Alloc[]; deadline: number; perObj: Map<string, number> }[] }
-  const simulate = (boost: Map<string, number>, riskSet: Set<string>): Sim => {
+  /** realPace: each day holds only what he really gets done (learned), not every free minute. */
+  const simulate = (boost: Map<string, number>, riskSet: Set<string>, realPace = false): Sim => {
     const units = new Map(units0), doneIdx = new Map(done0), owed = new Map<string, number>();
     const available = (m: Mission, t: number) => (!m.notBefore || addDays(today, t) >= m.notBefore)
       && (m.afterNoWait || []).every((a) => !byId.get(a) || (doneIdx.get(a) !== undefined && doneIdx.get(a)! <= t)) && (m.after || []).every((a) => {
@@ -193,7 +196,7 @@ export function forecast(s: State, now: number): Forecast {
     const out: Sim['days'] = [];
     for (let t = 0; t <= H; t++) {
       const d = infos[t];
-      let left = d.avail;
+      let left = realPace ? Math.min(d.avail, d.pace) : d.avail;
       const blocks: Alloc[] = [], perObj = new Map<string, number>();
       for (const o of order) {
         const rem = remaining(o.id);
@@ -296,6 +299,12 @@ export function forecast(s: State, now: number): Forecast {
     risky = late(sim);
   }
 
+  // ---- 3b. The honest check: at the pace he really works, does each deadline still land in time?
+  // Anything that doesn't is at risk (and gets planned even on a Recovery day).
+  const real = simulate(new Map(), new Set(), true);
+  const realLate = late(real);
+  if ([...realLate].some((id) => !risky.has(id))) sim = simulate(boost, new Set([...risky, ...realLate]));
+
   // ---- 4. Compose each day: routines, deadline work, then flexible goals in the comfortable room left.
   const exUsed = new Map<string, number>();
   const exOf = (date: string) => { const w = weekStart(date); if (!exUsed.has(w)) exUsed.set(w, exerciseMinWeek(s, w)); return exUsed.get(w)!; };
@@ -365,11 +374,17 @@ export function forecast(s: State, now: number): Forecast {
     if (!hasWork) continue;
     const d = landOf(sim, o);
     landing[o.id] = d === null ? null : addDays(today, Math.max(0, d));
-    if (risky.has(o.id)) risks.push({ objectiveId: o.id, title: o.title, due: o.due!, lands: landing[o.id], note: o.riskNote });
+    if (risky.has(o.id) || realLate.has(o.id)) {
+      const rd = landOf(real, o);
+      risks.push({ objectiveId: o.id, title: o.title, due: o.due!, lands: risky.has(o.id) ? landing[o.id] : rd === null ? null : addDays(today, Math.max(0, rd)), note: o.riskNote });
+    }
   }
   let lockIn: LockIn | null = null;
-  if (days[0].lock || risks.length) {
-    const share = sim.days[0].perObj;
+  const soon = days.slice(0, 7).filter((d) => !d.rest);
+  if (days[0].lock || risks.length || soon.some((d) => d.lock)) {
+    // the objective taking the most deadline time over the coming week
+    const share = new Map<string, number>();
+    for (let t = 0; t < Math.min(7, sim.days.length); t++) for (const [id, v] of sim.days[t].perObj) share.set(id, (share.get(id) || 0) + v);
     const top = [...share.entries()].sort((a, b) => b[1] - a[1])[0];
     const o = top ? s.objectives.find((x) => x.id === top[0]) : risks[0] && s.objectives.find((x) => x.id === risks[0].objectiveId);
     if (o) {
@@ -570,23 +585,33 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
       if (short > 0) blocks.push({ ...w, units: short, min: Math.round(w.min * short / w.units), baseMin: Math.round(w.baseMin * short / w.units) });
     }
   }
-  const order = blocks.sort((a, b) => Number(!!b.must && !b.habit) - Number(!!a.must && !a.habit) || Number(!!b.habit) - Number(!!a.habit) || Number(!!b.must) - Number(!!a.must) || hardness(b) - hardness(a));
+  // deadline work due sooner gets first pick of the day
+  const dueOf = (x: Alloc) => (x.deadline ? s.objectives.find((o) => o.id === byId.get(x.missionId)?.objectiveId)?.due || '9999' : '9999');
+  const order = blocks.sort((a, b) => Number(!!b.must && !b.habit) - Number(!!a.must && !a.habit) || Number(!!b.habit) - Number(!!a.habit) || Number(!!b.must) - Number(!!a.must) || dueOf(a).localeCompare(dueOf(b)) || hardness(b) - hardness(a));
   const sun = s.settings.sun ? sunTimes(date, s.settings.sun.lat, s.settings.sun.lon) : null;
   /** Every start (5-min steps) that fits, scored by predicted energy; hard work takes the best, light work the dips. */
-  const pick = (len: number, lo: number, fb: [number, number][], hi: number, light: boolean, outdoor = false): { i: number; a: number } | null => {
+  const pick = (len: number, lo: number, fb: [number, number][], hi: number, light: boolean, outdoor = false, asap = false): { i: number; a: number } | null => {
     let best: { i: number; a: number; sc: number } | null = null;
     for (let i = 0; i < slots.length; i++) {
       for (let a = Math.max(slots[i][0], lo); a + len <= Math.min(slots[i][1], hi); a += 5) {
         if (fb.some(([f0, f1]) => a < f1 && f0 < a + len)) continue;
         const e = energyBetween(curve, a, a + len);
         // outside: daylight strongly preferred, night still allowed
-        const sc = (light ? -e : e) + (outdoor && sun && a >= sun[0] && a + len <= sun[1] ? 10 : 0);
+        // urgent work (due within 2 days) takes the earliest time, so a whole chain of it fits in the day
+        const sc = asap ? -a : (light ? -e : e) + (outdoor && sun && a >= sun[0] && a + len <= sun[1] ? 10 : 0);
         if (!best || sc > best.sc + 0.01) best = { i, a, sc };
       }
     }
     return best ? { i: best.i, a: best.a } : null;
   };
-  for (const a of order) {
+  // steps of a chain go in order within the day too: anything waiting on another task today is placed after it
+  const deps = (id: string) => { const m = byId.get(id); return [...(m?.after || []), ...(m?.afterNoWait || [])].filter((x) => x !== id); };
+  const queue = [...order], ordered: Alloc[] = [];
+  while (queue.length) {
+    const i = queue.findIndex((b) => deps(b.missionId).every((d) => !queue.some((q) => q.missionId === d)));
+    ordered.push(queue.splice(i < 0 ? 0 : i, 1)[0]);
+  }
+  for (const a of ordered) {
     const m = byId.get(a.missionId); if (!m) continue;
     // biking there and back is light cardio: about an hour after a regular meal
     const ride = !!m.bike && !!m.travel;
@@ -599,13 +624,16 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     let lo = 0, hi = 1e9;
     if (m.daylight && s.settings.sun) { const [rise, set] = sunTimes(date, s.settings.sun.lat, s.settings.sun.lon); lo = Math.ceil(rise / 5) * 5; hi = Math.floor(set); }
     if (m.window) { lo = Math.max(lo, m.window[0]); hi = Math.min(hi, m.window[1]); }
+    // after whatever it waits on that's on today's plan
+    for (const d of deps(m.id)) for (const it of items) if (it.missionId === d) lo = Math.max(lo, it.end);
     const bad = !a.habit ? avoid.get(m.energy) : undefined;
     const soft: [number, number][] = [];
     if (bad) for (const it of items) { const c = catOf(it); if (c && bad.has(c)) soft.push([it.end, it.end + 45]); }
     let got: { i: number; a: number } | null = null;
+    const urgent = !a.habit && dueOf(a) !== '9999' && diffDays(date, dueOf(a)) <= 2;
     const light = (!!a.habit || m.energy === 'none') && !a.must;
     for (const fb of soft.length ? [[...forbid, ...soft], forbid] : [forbid]) {
-      got = pick(a.min, lo, fb, hi, light, !!m.outdoor);
+      got = pick(a.min, lo, fb, hi, light, !!m.outdoor, urgent);
       if (got) break;
     }
     const placeAt = (at: number, units: number, len: number) => {

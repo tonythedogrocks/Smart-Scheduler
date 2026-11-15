@@ -761,3 +761,36 @@ describe('due chores', () => {
     expect(st[3].end).toBeLessThanOrEqual(730); // done before leaving for the shift
   });
 });
+
+describe('chains within a day', () => {
+  it('a task that waits on another is placed after it on the same day', () => {
+    const s = sample();
+    const steps = s.missions.find((m) => m.id === 'exam-steps')!; steps.unitsLeft = 2;
+    s.missions.push({ id: 'ex-review', objectiveId: 'exam', title: 'Review', kind: 'work', energy: 'mental', minutes: 30, minLevel: 1, unitsLeft: 1, unitsTotal: 1, maxBlockUnits: 1, after: ['exam-tests'] } as any);
+    s.objectives.find((o) => o.id === 'exam')!.due = '2026-11-13';
+    s.days['2026-11-12'] = { level: 4, morningEnd: at('2026-11-12T09:00') };
+    const now = at('2026-11-12T09:00');
+    const items = layoutDay(s, forecast(s, now), '2026-11-12', now).filter((i) => i.kind === 'mission');
+    const end = (id: string) => Math.max(...items.filter((i) => i.missionId === id).map((i) => i.end));
+    const start = (id: string) => Math.min(...items.filter((i) => i.missionId === id).map((i) => i.start));
+    expect(items.some((i) => i.missionId === 'ex-review')).toBe(true);
+    expect(start('exam-tests')).toBeGreaterThanOrEqual(end('exam-steps'));
+    expect(start('ex-review')).toBeGreaterThanOrEqual(end('exam-tests'));
+  });
+});
+
+describe('done earlier', () => {
+  it('logs it with the times he enters and takes it off the plan', async () => {
+    const { actions, S, adopt } = await import('../src/model/store');
+    const { setNowOverride } = await import('../src/model/time');
+    const s = sample();
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00'), plan: { sig: 'x', items: [{ key: 'k', missionId: 'course-lessons', start: 600, end: 630, title: 'X', units: 1, baseMin: 30, min: 30 }] } };
+    const before = s.missions.find((m) => m.id === 'course-lessons')!.unitsLeft!;
+    adopt(s);
+    setNowOverride('2026-11-12T12:00:00'); actions.doneEarlier('course-lessons', 1, 30, 600, 625, undefined, 'k'); setNowOverride(null);
+    const l = S().logs.find((x) => x.missionId === 'course-lessons')!;
+    expect(Math.round((l.end - l.start) / 60000)).toBe(25);
+    expect(S().days['2026-11-12'].plan!.items.length).toBe(0);
+    expect(S().missions.find((m) => m.id === 'course-lessons')!.unitsLeft).toBe(before - 1);
+  });
+});

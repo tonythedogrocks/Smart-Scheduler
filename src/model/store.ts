@@ -155,6 +155,21 @@ export const actions = {
     });
     if (got.length) toast('Achievement unlocked!'); else if (floor) toast("Today's floor is hit. Full mission success!");
   },
+  /** Done earlier and logging it now: records it with the real times he enters (minutes from midnight, today). */
+  doneEarlier(missionId: string, units: number, plannedMin: number, fromMin: number, toMin: number, step?: number, key?: string) {
+    let got: string[] = [];
+    mutate((s) => {
+      const date = today(), base = new Date(nowTs()); base.setHours(0, 0, 0, 0);
+      const start = base.getTime() + fromMin * 60000, end = base.getTime() + Math.max(fromMin + 1, toMin) * 60000;
+      s.logs.push({ id: uid(), missionId, date, start, end, plannedMin, units, done: true, level: s.days[date]?.level, xp: Math.round(Math.min((end - start) / 60000, Math.max(plannedMin * 2, 10))), ...(step !== undefined ? { step } : {}) });
+      const pl = s.days[date]?.plan;
+      if (pl) { const i = pl.items.findIndex((x) => (key ? x.key === key : x.missionId === missionId)); if (i >= 0) pl.items.splice(i, 1); }
+      const m = s.missions.find((x) => x.id === missionId);
+      if (m?.kind === 'work') { m.unitsLeft = Math.max(0, (m.unitsLeft || 0) - units); if (m.unitsLeft === 0) m.doneAt = date; }
+      got = afterChange(s, date);
+    });
+    if (got.length) toast('Achievement unlocked!');
+  },
   cancelRun() { mutate((s) => { s.running = undefined; }); },
   flare() {
     const id = uid();

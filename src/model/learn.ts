@@ -2,12 +2,14 @@ import type { State, Level, Mission } from './types';
 import { addDays, dateOf, diffDays, minsOf, parseD, weekStart, weekday } from './time';
 import { eventsOn, isRest } from './schedule';
 
+/** A record long enough to learn from (Start and Done tapped back to back teaches nothing). */
+export const real = (l: { start: number; end: number }) => l.end > 0 && l.end - l.start >= 60000;
 const mins = (l: { start: number; end: number }) => (l.end > 0 ? Math.max(1, (l.end - l.start) / 60000) : 0);
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
 
 /** Real duration vs. estimate for a mission. Acts only once there are 3 finished runs. */
 export function factor(s: State, missionId: string): number {
-  const ls = s.logs.filter((l) => l.missionId === missionId && l.done && l.plannedMin > 0 && l.end > 0);
+  const ls = s.logs.filter((l) => l.missionId === missionId && l.done && l.plannedMin > 0 && real(l));
   if (ls.length < 3) return 1;
   // plannedMin is the base estimate, so the ratio is the real-world correction.
   return clamp(ls.reduce((a, l) => a + mins(l), 0) / ls.reduce((a, l) => a + l.plannedMin, 0), 0.5, 2.5);
@@ -138,6 +140,8 @@ export function learnedLevel(s: State, date: string, today: string): number {
 /** Level assumed for a day not reported yet: Active (optimal), as he asked, until he reports in that day. */
 export function predictLevel(s: State, date: string, _today: string): number {
   // a day not reported yet is planned at the level it's predicted to be (that weekday's pattern, else recent days)
+  // the rest day is planned as a 1 until he reports 3+ that morning
+  if (isRest(s, date)) return 1;
   return s.days[date]?.level ?? Math.min(5, Math.max(1, Math.round(learnedLevel(s, date, _today))));
 }
 

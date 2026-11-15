@@ -34,8 +34,13 @@ describe('planner', () => {
   it('Recovery day is floor only', () => {
     const s = fresh(1);
     const fc = forecast(s, at('2026-11-11T09:00'));
-    expect(fc.days[0].blocks.every((b) => b.habit)).toBe(true);
-    expect(fc.days[0].blocks.map((b) => b.missionId).sort()).toEqual(['breathe', 'cards']);
+    // routines, plus only deadline work that's at risk or due within a day (lock-in: it happens regardless of how he feels)
+    const atRisk = new Set(fc.risks.map((r) => r.objectiveId));
+    for (const b of fc.days[0].blocks.filter((x) => !x.habit)) {
+      const o = s.objectives.find((x) => x.id === s.missions.find((m) => m.id === b.missionId)!.objectiveId)!;
+      expect(atRisk.has(o.id) || (o.due && o.due <= '2026-11-12')).toBeTruthy();
+    }
+    expect(fc.days[0].blocks.filter((b) => b.habit).map((b) => b.missionId).sort()).toEqual(['breathe', 'cards']);
   });
   it('On Duty day mixes goals, respects capacity, never plans into Off Duty', () => {
     const s = fresh(3);
@@ -65,10 +70,20 @@ describe('planner', () => {
     const items = layoutDay(s, forecast(s, now), '2026-11-11', now);
     expect(items.filter((x) => x.kind === 'mission').reduce((a, b) => a + (b.end - b.start), 0)).toBeLessThanOrEqual(40);
   });
-  it('rest day plans no goal missions by default', () => {
-    const s = fresh(4, '2026-11-15');
+  it('rest day at 1 or 2 plans no goal missions; at 3+ it is a work day', () => {
+    const s = fresh(2, '2026-11-15');
     const fc = forecast(s, at('2026-11-15T09:00'));
-    expect(fc.days[0].blocks.length).toBe(0);
+    expect(fc.days[0].rest).toBe(true);
+    expect(fc.days[0].blocks.filter((b) => !b.habit).length).toBe(0);
+    const s4 = fresh(4, '2026-11-15');
+    const f4 = forecast(s4, at('2026-11-15T09:00'));
+    expect(f4.days[0].rest).toBe(false);
+    expect(f4.days[0].blocks.filter((b) => !b.habit).length).toBeGreaterThan(0);
+  });
+  it('an unreported rest day is planned as a 1', () => {
+    const s = fresh(3, '2026-11-14');
+    const fc = forecast(s, at('2026-11-14T09:00'));
+    expect(fc.days.find((d) => d.date === '2026-11-15')!.level).toBe(1);
   });
   it('flags the sprint when a modest pace misses it, with landing dates', () => {
     const s = fresh(3);

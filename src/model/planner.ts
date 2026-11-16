@@ -57,7 +57,7 @@ export function nextLabels(m: Mission, units: number, skip = 0): string[] {
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
 const round5 = (x: number) => Math.ceil(x / 5) * 5;
 
-export function habitMin(m: Mission, level: number) { return level >= 5 && m.minutesAt5 ? m.minutesAt5 : m.minutes; }
+export function habitMin(m: Mission, level: number) { return level >= (m.longFrom ?? 5) && m.minutesAt5 ? m.minutesAt5 : m.minutes; }
 export function habitTitle(m: Mission, level: number) { return level <= 2 && m.lowTitle ? `${m.title.split(':')[0]}: ${m.lowTitle}` : m.title; }
 
 export function lastDone(s: State, id: string, before?: string): string | null {

@@ -19,7 +19,8 @@ export interface Mission {
   kind: 'habit' | 'work' | 'practice' | 'chore';
   energy: Energy;
   minutes: number;         // habit: session; work: minutes per unit; practice: block
-  minutesAt5?: number;     // habit on Plus Ultra
+  minutesAt5?: number;     // habit: longer version (from level longFrom, default 5 = Plus Ultra)
+  longFrom?: number;
   lowTitle?: string;       // habit wording at Recovery / Standby
   minLevel: Level;
   everyDays?: number;      // habit cadence

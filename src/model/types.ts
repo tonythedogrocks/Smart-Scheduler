@@ -83,6 +83,7 @@ export interface Log {
 export interface DayRec {
   mealMoved?: { lunch?: number; dinner?: number }; // where the app last moved an uneaten meal (it waits 30 min before moving it again)
   t?: number; ft?: Record<string, number>; level?: Level; setAt?: number; floorAwarded?: boolean; lunchAt?: number; dinnerAt?: number; lunchMin?: number; dinnerMin?: number; starts?: Record<string, number>; cook?: boolean | 'family'; cookAt?: number; cookStart?: number; cookEnd?: number; morningEnd?: number; dinnerTap?: number;
+  lateBy?: number;         // what-if only (never saved): minutes late getting up
   feel?: 'much' | 'right' | 'more'; // his end-of-day answer: too much / about right / room for more
   dishes?: Partial<Record<'lunch' | 'dinner', { start: number; end?: number }>>; // dishes he timed (timestamps)
   ate?: Partial<Record<'lunch' | 'dinner', { at: number; big?: boolean; end?: number }>>; // end: when he tapped done eating

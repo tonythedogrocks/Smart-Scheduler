@@ -205,3 +205,22 @@ export function requestText(level: number): string {
   const who = level >= 5 ? 'a Hero willing to Go Beyond' : level === 4 ? 'an Active Hero' : level === 3 ? 'a Hero On Duty' : 'a Hero on Standby';
   return `REQUEST: HQ is searching for ${who} (level ${level})`;
 }
+
+let lateMemo: { key: string; titles: string[] } | null = null;
+/**
+ * The night before: would getting up an hour late tomorrow lose a deadline? (A FINAL STAND that needs the
+ * whole morning.) Returns the deadlines it would lose; empty if a late start is survivable.
+ */
+export function lateRisk(s: State, now: number): string[] {
+  const today = dateOf(now), tomorrow = addDays(today, 1);
+  const key = JSON.stringify([s.updatedAt, today]);
+  if (lateMemo?.key === key) return lateMemo.titles;
+  const base = forecast(s, now);
+  const probe: State = { ...s, days: { ...s.days, [tomorrow]: { ...(s.days[tomorrow] || {}), lateBy: 60 } }, updatedAt: -Math.random() };
+  const late = forecast(probe, now);
+  const was = new Set(base.risks.map((r) => r.objectiveId));
+  const titles = late.risks.filter((r) => !was.has(r.objectiveId)).map((r) => r.title);
+  forecast(s, now); // put the real forecast back in the cache
+  lateMemo = { key, titles };
+  return titles;
+}

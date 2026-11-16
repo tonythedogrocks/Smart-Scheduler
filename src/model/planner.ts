@@ -364,7 +364,7 @@ export function forecast(s: State, now: number): Forecast {
       const fewest = (goodDays: boolean) => {
         const top = goodDays ? cap : capFinal;
         if (holds(0, goodDays)) return 0;
-        // even all of it today isn't enough: for the deadline itself, all of it (HEADS UP says so);
+        // even all of it today isn't enough: for the deadline itself, all of it (RED ALERT says so);
         // for keeping later days at their predicted level, nothing today fixes it, so no DANGER (a later day gets a REQUEST)
         if (!holds(top, goodDays)) return goodDays ? 0 : top;
         let lo = 1, hi = top;
@@ -632,7 +632,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
       // meals, routines or Off Duty, as long as he's home (not out at an event) and before getting ready for bed
       if (anchor < 0) {
         const away = fixed.filter((b) => b.kind === 'event' || b.kind === 'travel').map((b) => [b.start, b.end] as [number, number]);
-        const bed = fixed.find((x) => x.kind === 'offduty')!.end;
+        const bed = fixed.find((x) => x.kind === 'offduty')!.start; // the whole cycle done before Off Duty, so it isn't left half-done overnight
         const home = (a: number, len: number) => !away.some(([x, y]) => a < y && x < a + len) && a + len <= bed;
         const wake = fixed.find((x) => x.key === 'f:morning')!.start; // awake: never before he's up
         for (let t = Math.max(round5(nowMin), wake); t + steps[steps.length - 1].at + steps[steps.length - 1].min <= bed; t += 5) {

@@ -900,3 +900,18 @@ describe('exam day', () => {
     for (const i of items) expect(i.end).toBeLessThanOrEqual(600);
   });
 });
+
+describe('red alert for tomorrow morning', () => {
+  it('flags a deadline that needs the whole morning before an exam', async () => {
+    const { lateRisk } = await import('../src/model/vm');
+    const s = sample();
+    s.objectives.find((o) => o.id === 'exam')!.due = '2026-11-13';
+    s.missions.find((m) => m.id === 'exam-steps')!.unitsLeft = 2; // 60 min left
+    s.missions.find((m) => m.id === 'exam-tests')!.unitsLeft = 0;
+    s.events.push({ id: 'ex', title: 'Exam', kind: 'exam', start: 645, end: 720, travel: 0, date: '2026-11-13' } as any);
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
+    const now = at('2026-11-12T21:05'); // too late tonight
+    expect(forecast(s, now).risks.some((r) => r.objectiveId === 'exam')).toBe(false);
+    expect(lateRisk(s, now).length).toBe(1);
+  });
+});

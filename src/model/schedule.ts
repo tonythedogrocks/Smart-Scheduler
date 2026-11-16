@@ -60,8 +60,9 @@ export function eventsOn(s: State, date: string): Evt[] {
 /** Wake time: 8:00, or earlier when the first commitment needs it. */
 export function wakeFor(s: State, date: string): number {
   const ev = eventsOn(s, date)[0];
-  if (!ev) return s.settings.wake;
-  return Math.min(s.settings.wake, ev.start - ev.travel - s.settings.morningMin);
+  const late = s.days[date]?.lateBy || 0; // what-if only: getting up this many minutes late
+  if (!ev) return s.settings.wake + late;
+  return Math.min(s.settings.wake, ev.start - ev.travel - s.settings.morningMin) + late;
 }
 
 /** Start of getting ready for bed; moves earlier when tomorrow starts early. */

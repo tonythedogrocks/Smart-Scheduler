@@ -932,3 +932,17 @@ describe('saved plan and finished work', () => {
     expect(keys.includes('a') || keys.includes('b')).toBe(false);
   });
 });
+
+describe('chains with a missing step', () => {
+  it('if a middle step of a chain does not fit today, the step after it is not placed today either', () => {
+    const s = sample();
+    s.missions.push({ id: 'mid', objectiveId: 'exam', title: 'Mid', kind: 'work', energy: 'mental', minutes: 600, minLevel: 1, unitsLeft: 1, unitsTotal: 1, maxBlockUnits: 1, after: ['exam-steps'] } as any);
+    s.missions.push({ id: 'last', objectiveId: 'exam', title: 'Last', kind: 'work', energy: 'mental', minutes: 30, minLevel: 1, unitsLeft: 1, unitsTotal: 1, maxBlockUnits: 1, after: ['mid'] } as any);
+    s.missions.find((m) => m.id === 'exam-steps')!.unitsLeft = 1;
+    s.objectives.find((o) => o.id === 'exam')!.due = '2026-11-13';
+    s.days['2026-11-12'] = { level: 4, morningEnd: at('2026-11-12T09:00') };
+    const now = at('2026-11-12T09:00');
+    const items = layoutDay(s, forecast(s, now), '2026-11-12', now).filter((i) => i.kind === 'mission');
+    if (!items.some((i) => i.missionId === 'mid')) expect(items.some((i) => i.missionId === 'last')).toBe(false);
+  });
+});

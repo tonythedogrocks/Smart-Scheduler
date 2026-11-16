@@ -713,6 +713,12 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   };
   // steps of a chain go in order within the day too: anything waiting on another task today is placed after it
   const deps = (id: string) => { const m = byId.get(id); return [...(m?.after || []), ...(m?.afterNoWait || [])].filter((x) => x !== id); };
+  /** Everything a task waits on, all the way down the chain. */
+  const allDeps = (id: string, seen = new Set<string>()): Set<string> => { for (const d of deps(id)) if (!seen.has(d)) { seen.add(d); allDeps(d, seen); } return seen; };
+  const todayIds = new Set(blocks.map((b) => b.missionId));
+  /** Tasks on today's plan that wait on this one. */
+  const hasSuccessorToday = (id: string) => [...todayIds].some((x) => x !== id && allDeps(x).has(id));
+  const unplaced = new Set<string>();
   const queue = [...order], ordered: Alloc[] = [];
   while (queue.length) {
     const i = queue.findIndex((b) => deps(b.missionId).every((d) => !queue.some((q) => q.missionId === d)));
@@ -736,15 +742,19 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     if (m.window) { lo = Math.max(lo, m.window[0]); hi = Math.min(hi, m.window[1]); }
     // work for an exam, on the exam's own day, has to be done before it starts
     { const o = s.objectives.find((x) => x.id === m.objectiveId); if (o?.due === date) { const ex = eventsOn(s, date).filter((e) => e.kind === 'exam'); if (ex.length) hi = Math.min(hi, Math.min(...ex.map((e) => e.start - e.travel))); } }
-    // after whatever it waits on that's on today's plan
-    for (const d of deps(m.id)) for (const it of items) if (it.missionId === d) lo = Math.max(lo, it.end);
+    // after everything it waits on (all the way down the chain) that's on today's plan;
+    // if one of those couldn't be placed today, this can't happen today either
+    const before = allDeps(m.id);
+    if ([...before].some((d) => unplaced.has(d))) { unplaced.add(m.id); continue; }
+    for (const it of items) if (it.missionId && before.has(it.missionId)) lo = Math.max(lo, it.end);
     const bad = !a.habit ? avoid.get(m.energy) : undefined;
     const soft: [number, number][] = [];
     if (bad) for (const it of items) { const c = catOf(it); if (c && bad.has(c)) soft.push([it.end, it.end + 45]); }
     let got: { i: number; a: number } | null = null;
     // DANGER and FINAL STAND work gets his peak hours; once he's missed one today it's simply first in line until it's done
     const missedToday = isToday && realMisses(s, date).some((x) => x.m === m.id);
-    const urgent = !a.habit && ((dueOf(a) !== '9999' && diffDays(date, dueOf(a)) <= 2) || (!!a.tier && missedToday));
+    // ... and anything with later steps of its chain on today's plan goes early, so the rest of the chain fits after it
+    const urgent = !a.habit && ((dueOf(a) !== '9999' && diffDays(date, dueOf(a)) <= 2) || (!!a.tier && missedToday) || (m.kind === 'work' && hasSuccessorToday(m.id)));
     const light = (!!a.habit || m.energy === 'none') && !a.must;
     for (const fb of soft.length ? [[...forbid, ...soft], forbid] : [forbid]) {
       got = pick(a.min, lo, fb, hi, light, !!m.outdoor, urgent);
@@ -762,7 +772,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     };
     if (got) { placeAt(got.a, a.units, a.min); continue; }
     // Doesn't fit whole: split goal work across the gaps that are left (pieces of 15 min or more), instead of dropping it.
-    if (m.kind !== 'work' || a.units < 2 || m.travel) continue; // the rest goes back to the pool, silently
+    if (m.kind !== 'work' || a.units < 2 || m.travel) { unplaced.add(m.id); continue; } // the rest goes back to the pool, silently
     const unitLen = a.min / a.units;
     let left = a.units;
     while (left > 0) {
@@ -775,6 +785,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
       }
       if (!placed) break;
     }
+    if (left > 0) unplaced.add(m.id); // some of it didn't fit: what waits on it can't happen today
   }
   if (!choresDone) placeChores();
   // Blocks can land out of planning order (best times, gaps), so name each mission's blocks in time order.

@@ -10,9 +10,12 @@ export interface Block {
 
 /** The weekly rest day: essentials only. */
 /** The rest day, unless it's a backup week or he reported level 3+ that morning (then it's a normal work day). */
-export const isRest = (s: State, date: string) => s.settings.restDay !== null && weekday(date) === s.settings.restDay && !(s.settings.backupWeeks || []).includes(weekStart(date)) && !((s.days[date]?.level ?? 0) >= 3);
+/** The Sabbath: no special rules, except that until he reports a level it's planned and counted as a 1 (Max Sabbath). */
+export const isSabbath = (s: State, date: string) => s.settings.restDay !== null && weekday(date) === s.settings.restDay;
+/** No day has rest-day rules anymore (kept so older call sites read as "not a rest day"). */
+export const isRest = (_s: State, _date: string) => false;
 /** The rest day of a week that has been switched to a backup work day. */
-export const isBackupDay = (s: State, date: string) => s.settings.restDay !== null && weekday(date) === s.settings.restDay && (s.settings.backupWeeks || []).includes(weekStart(date));
+export const isBackupDay = (_s: State, _date: string) => false;
 
 /** Sunrise and sunset in local minutes (NOAA approximation). */
 export function sunTimes(date: string, lat: number, lon: number): [number, number] {

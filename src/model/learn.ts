@@ -1,6 +1,6 @@
 import type { State, Level, Mission } from './types';
 import { addDays, dateOf, diffDays, minsOf, parseD, weekStart, weekday } from './time';
-import { eventsOn, isRest } from './schedule';
+import { eventsOn, isRest, isSabbath } from './schedule';
 
 /** A record long enough to learn from (Start and Done tapped back to back teaches nothing). */
 export const real = (l: { start: number; end: number }) => l.end > 0 && l.end - l.start >= 60000;
@@ -129,6 +129,7 @@ function levelHistory(s: State, today: string): [string, number][] {
  */
 export function learnedLevel(s: State, date: string, today: string): number {
   if (s.days[date]?.level) return s.days[date].level!;
+  if (isSabbath(s, date)) return 1; // the Sabbath is counted as a 1 until he reports
   const h = levelHistory(s, today);
   const same = h.filter(([d]) => weekday(d) === weekday(date)).slice(-6).map(([, l]) => l);
   const recent = h.slice(-14).map(([, l]) => l);
@@ -140,8 +141,8 @@ export function learnedLevel(s: State, date: string, today: string): number {
 /** Level assumed for a day not reported yet: Active (optimal), as he asked, until he reports in that day. */
 export function predictLevel(s: State, date: string, _today: string): number {
   // a day not reported yet is planned at the level it's predicted to be (that weekday's pattern, else recent days)
-  // the rest day is planned as a 1 until he reports 3+ that morning
-  if (isRest(s, date)) return 1;
+  // the Sabbath is planned as a 1 (Max Sabbath) until he reports
+  if (!s.days[date]?.level && isSabbath(s, date)) return 1;
   return s.days[date]?.level ?? Math.min(5, Math.max(1, Math.round(learnedLevel(s, date, _today))));
 }
 

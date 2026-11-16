@@ -70,17 +70,13 @@ describe('planner', () => {
     const items = layoutDay(s, forecast(s, now), '2026-11-11', now);
     expect(items.filter((x) => x.kind === 'mission').reduce((a, b) => a + (b.end - b.start), 0)).toBeLessThanOrEqual(40);
   });
-  it('rest day at 1 or 2 plans no goal missions; at 3+ it is a work day', () => {
-    const s = fresh(2, '2026-11-15');
-    const fc = forecast(s, at('2026-11-15T09:00'));
-    expect(fc.days[0].rest).toBe(true);
-    expect(fc.days[0].blocks.filter((b) => !b.habit).length).toBe(0);
+  it('the Sabbath has no special rules: a reported level plans like any day', () => {
     const s4 = fresh(4, '2026-11-15');
     const f4 = forecast(s4, at('2026-11-15T09:00'));
     expect(f4.days[0].rest).toBe(false);
     expect(f4.days[0].blocks.filter((b) => !b.habit).length).toBeGreaterThan(0);
   });
-  it('an unreported rest day is planned as a 1', () => {
+  it('an unreported Sabbath is planned as a 1, and nothing is paced onto it', () => {
     const s = fresh(3, '2026-11-14');
     const fc = forecast(s, at('2026-11-14T09:00'));
     expect(fc.days.find((d) => d.date === '2026-11-15')!.level).toBe(1);

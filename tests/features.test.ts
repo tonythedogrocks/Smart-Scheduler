@@ -261,12 +261,12 @@ describe('V1 features', () => {
     expect(it!.start).toBeGreaterThanOrEqual(600);
     expect(it!.end).toBeLessThanOrEqual(1020);
   });
-  it('a backup week turns the rest day into a work day', async () => {
-    const { isRest } = await import('../src/model/schedule');
+  it('laundry can happen on the Sabbath, even at level 1', () => {
     const s = sample();
-    expect(isRest(s, '2026-11-15')).toBe(true);
-    s.settings.backupWeeks = ['2026-11-15']; // weeks start on Sunday
-    expect(isRest(s, '2026-11-15')).toBe(false);
+    s.missions.push({ id: 'wash', objectiveId: '', title: 'Wash', kind: 'chore', energy: 'none', minutes: 5, minLevel: 1, everyDays: 7, lastAt: '2026-11-01', steps: [{ at: 0, min: 5, title: 'start' }, { at: 60, min: 5, title: 'done' }] } as any);
+    s.days['2026-11-15'] = { level: 1, morningEnd: at('2026-11-15T09:00') };
+    const now = at('2026-11-15T12:00');
+    expect(layoutDay(s, forecast(s, now), '2026-11-15', now).filter((i) => i.missionId === 'wash').length).toBe(2);
   });
   it('learns the usual dinner time from Dinner now taps', async () => {
     const { learnedDinner } = await import('../src/model/schedule');

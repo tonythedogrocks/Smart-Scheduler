@@ -3,7 +3,7 @@ import { S, actions, setLocal } from '../model/store';
 import { LEVELS } from '../model/seed';
 import { dateOf, fmtLong, nowTs } from '../model/time';
 import { floorText } from '../model/vm';
-import { isRest } from '../model/schedule';
+import { isSabbath } from '../model/schedule';
 import { Arrow } from './bits';
 import type { Level } from '../model/types';
 
@@ -11,7 +11,7 @@ export function StatusReport() {
   const today = dateOf(nowTs());
   const cur = S().days[today]?.level;
   const [picked, setPicked] = useState<number>(cur || 3);
-  const sab = isRest(S(), today);
+  const sab = isSabbath(S(), today);
   const sel = LEVELS.find((l) => l.n === picked)!;
   return (
     <div class="app status">
@@ -29,7 +29,7 @@ export function StatusReport() {
             <span class="n">{l.n}</span>
             <span style="display:flex;flex-direction:column;gap:1px">
               <span class="nm">{l.name}</span>
-              <span class="soft" style="font-size:14px">{l.means}</span>
+              <span class="soft" style="font-size:14px">{sab && l.n === 1 ? 'Max Sabbath' : l.means}</span>
             </span>
           </button>
         ))}

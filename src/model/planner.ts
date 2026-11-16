@@ -131,7 +131,7 @@ export function forecast(s: State, now: number): Forecast {
     const date = addDays(today, t);
     const rest = isRest(s, date);
     const real = s.days[date]?.level;
-    const level = rest ? 1 : t === 0 && real ? real : predictLevel(s, date, today);
+    const level = t === 0 && real ? real : predictLevel(s, date, today);
     const paceLevel = t === 0 || real ? level : learnedLevel(s, date, today);
     const fixed = fixedBlocks(s, date);
     const from = t === 0 ? round5(minsOf(now)) : 0;
@@ -168,7 +168,8 @@ export function forecast(s: State, now: number): Forecast {
     // Deadline pacing weighs days not reported yet at the level predicted from his history; how a future
     // day looks (its room, its timeline) uses the optimistic preview level.
     const paceComfort = t === 0 || real ? comfort : Math.min(avail, capacityAt(s, paceLevel, today) * weekdayFactor(s, today, weekday(date)));
-    const weight = rest || avail <= 0 ? 0 : Math.max(paceComfort, avail * 0.25) * span;
+    // a day expected to be a 1 (e.g. the Sabbath) isn't counted on for paced work
+    const weight = rest || avail <= 0 || paceComfort <= 0 ? 0 : Math.max(paceComfort, avail * 0.25) * span;
     // what a day at its predicted level holds (today: what's left of today at the level he reported)
     const good = rest ? 0 : t === 0 ? comfort : paceComfort;
     infos.push({ date, rest, level, avail, comfort, weight, routines, good });
@@ -319,7 +320,9 @@ export function forecast(s: State, now: number): Forecast {
   const tierUnits = new Map<string, { final: number; danger: number }>();
   if (!infos[0].rest) {
     let room = infos[0].avail - day0.deadline;
-    const candidates = live.filter((m) => m.kind === 'work' && !m.errand && (units0.get(m.id) || 0) > 0 && (todayUnits.has(m.id) || sim.doneIdx.get(m.id) === 1)
+    // anything of a deadline that could be worked on today (even if the plan gave it nothing, e.g. on a level-1 day)
+    const startable = (m: Mission) => (!m.notBefore || today >= m.notBefore) && [...(m.after || []), ...(m.afterNoWait || [])].every((a) => !byId.get(a) || done0.has(a) || todayUnits.has(a));
+    const candidates = live.filter((m) => m.kind === 'work' && !m.errand && (units0.get(m.id) || 0) > 0 && (todayUnits.has(m.id) || startable(m))
       && deadlineObjs.some((o) => o.id === m.objectiveId));
     for (const m of candidates) {
       const o = deadlineObjs.find((x) => x.id === m.objectiveId)!;

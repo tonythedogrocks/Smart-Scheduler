@@ -143,7 +143,7 @@ export function App() {
                   return (
                     <div class="alert lock">
                       <span class="k">LOCK IN</span>
-                      <span>{k.final ? `FINAL STAND: about ${fmtDur(k.final)} today, or the deadline is lost. ` : ''}{k.danger ? `DANGER: about ${fmtDur(k.danger)} today, or the days after get harder than you can keep up.` : ''}</span>
+                      <span>{k.final ? `FINAL STAND: about ${fmtDur(k.final)} today, or the deadline is lost. ` : ''}{k.danger ? `DANGER: about ${fmtDur(k.danger)} today, or the days after need more than their predicted level.` : ''}</span>
                       <span style="font-size:14px">{k.titles.join(' · ')}</span>
                     </div>
                   );

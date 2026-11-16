@@ -169,8 +169,8 @@ export function forecast(s: State, now: number): Forecast {
     // day looks (its room, its timeline) uses the optimistic preview level.
     const paceComfort = t === 0 || real ? comfort : Math.min(avail, capacityAt(s, paceLevel, today) * weekdayFactor(s, today, weekday(date)));
     const weight = rest || avail <= 0 ? 0 : Math.max(paceComfort, avail * 0.25) * span;
-    // what he can sustain on a good day (Active), learned from his history
-    const good = rest ? 0 : Math.min(avail, capacityAt(s, 4, today) * (t === 0 ? 1 : weekdayFactor(s, today, weekday(date))));
+    // what a day at its predicted level holds (today: what's left of today at the level he reported)
+    const good = rest ? 0 : t === 0 ? comfort : paceComfort;
     infos.push({ date, rest, level, avail, comfort, weight, routines, good });
   }
 
@@ -188,7 +188,7 @@ export function forecast(s: State, now: number): Forecast {
 
   interface Sim { units: Map<string, number>; doneIdx: Map<string, number>; days: { blocks: Alloc[]; deadline: number; perObj: Map<string, number> }[] }
   /**
-   * goodDays: each day holds only what he can sustain on a good day, not every free minute.
+   * goodDays: each day holds only what its predicted level holds, not every free minute.
    * from/startUnits/startDone: a what-if starting on a later day with some work already done.
    */
   const simulate = (boost: Map<string, number>, riskSet: Set<string>, goodDays = false, from = 0, startUnits = units0, startDone = done0): Sim => {
@@ -310,7 +310,7 @@ export function forecast(s: State, now: number): Forecast {
 
   // ---- 3b. Lock-in: how much of each task has to happen TODAY.
   // FINAL STAND: the fewest units today without which the deadline is lost, even using every free hour after today.
-  // DANGER: the fewest units today without which the days after would have to go past a good day to stay on track
+  // DANGER: the fewest units today without which the days after would have to go past what their predicted level holds to stay on track
   // (land by the safe date). Missing DANGER work hurts but isn't the end: the safe date sits before the due date.
   // Both are planned whatever his level, and added to today if the plan had less.
   const day0 = sim.days[0];

@@ -756,12 +756,15 @@ describe('due chores', () => {
   it('a due chore is kept on a full day, its steps sharing time while he is home', () => {
     const s = sample();
     s.missions.push({ id: 'wash', objectiveId: '', title: 'Wash', kind: 'chore', energy: 'none', minutes: 5, minLevel: 1, everyDays: 7, lastAt: '2026-11-01', steps: [{ at: 0, min: 5, title: 'start' }, { at: 60, min: 5, title: 'move' }, { at: 140, min: 5, title: 'move again' }, { at: 220, min: 5, title: 'put away' }] } as any);
-    s.events.push({ id: 'ev', title: 'Event', kind: 'event', start: 600, end: 1020, travel: 30, date: '2026-11-12' } as any);
+    s.events.push({ id: 'ev', title: 'Event', kind: 'event', start: 600, end: 960, travel: 30, date: '2026-11-12' } as any);
     s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
     const now = at('2026-11-12T13:00');
     const st = layoutDay(s, forecast(s, now), '2026-11-12', now).filter((i) => i.missionId === 'wash');
     expect(st.length).toBe(4);
-    for (const i of st) expect(i.start >= 1050).toBe(true);
+    for (const i of st) expect(i.start >= 990).toBe(true);
+    // the whole cycle is done before Off Duty, never left half-done overnight
+    const off = layoutDay(s, forecast(s, now), '2026-11-12', now).find((i) => i.block?.kind === 'offduty')!.start;
+    for (const i of st) expect(i.end).toBeLessThanOrEqual(off);
   });
   it('on a later day it starts once he is up, never at night', () => {
     const s = sample();

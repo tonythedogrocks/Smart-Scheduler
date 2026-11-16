@@ -878,3 +878,13 @@ describe('capacity vs following the plan', () => {
     expect(dayCapacity(s, '2026-11-10')).toBeCloseTo(o * 1.15);
   });
 });
+
+describe('answered days count more', () => {
+  it('a day with an end-of-day answer weighs 3x a day without one', async () => {
+    const { learnedCapacity } = await import('../src/model/learn');
+    const s = sample();
+    const day = (d: string, h: number, feel?: 'right') => { s.days[d] = { level: 3, misses: [{ m: 'course-paper', at: 1 }], ...(feel ? { feel } : {}) }; s.logs.push({ id: d, missionId: 'course-lessons', date: d, start: at(`${d}T08:00`), end: at(`${d}T08:00`) + h * 3600000, plannedMin: h * 60, units: 1, done: true }); };
+    day('2026-11-02', 1); day('2026-11-03', 1); day('2026-11-04', 4, 'right');
+    expect(Math.round(learnedCapacity(s, '2026-11-10')[3]!.mean)).toBe(Math.round((60 / 3 + 60 / 3 + 240) / (1 / 3 + 1 / 3 + 1)));
+  });
+});

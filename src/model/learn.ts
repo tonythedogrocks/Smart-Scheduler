@@ -41,13 +41,15 @@ export function dayCapacity(s: State, d: string): number {
 
 /** How many minutes of non-habit work a level really gets done. */
 export function learnedCapacity(s: State, today: string): Partial<Record<Level, { n: number; mean: number }>> {
-  const by: Record<number, number[]> = {};
+  // days he answered the end-of-day question count fully; days without an answer (including everything from before
+  // the question existed) count a third as much
+  const by: Record<number, [number, number][]> = {};
   for (const [d, r] of Object.entries(s.days)) {
     if (!r.level || d >= today || isRest(s, d)) continue;
-    (by[r.level] ||= []).push(dayCapacity(s, d));
+    (by[r.level] ||= []).push([dayCapacity(s, d), r.feel ? 1 : 1 / 3]);
   }
   const out: Partial<Record<Level, { n: number; mean: number }>> = {};
-  for (const k of Object.keys(by)) { const a = by[+k]; out[+k as Level] = { n: a.length, mean: a.reduce((x, y) => x + y, 0) / a.length }; }
+  for (const k of Object.keys(by)) { const a = by[+k], w = a.reduce((x, [, v]) => x + v, 0); out[+k as Level] = { n: a.length, mean: a.reduce((x, [o, v]) => x + o * v, 0) / w }; }
   return out;
 }
 

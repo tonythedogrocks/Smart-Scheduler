@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { S, L, actions, go, setLocal, type Nav } from '../model/store';
 import { buildLibrary, type PanelVM } from '../model/vm';
 import { GRACE, planSig } from '../model/planner';
-import { eatingNow, fixedBlocks } from '../model/schedule';
+import { eatingNow, fixedBlocks, isSabbath } from '../model/schedule';
 import { isFresh, onSyncStatus, syncStatus } from '../model/sync';
 import type { PlanSnap } from '../model/types';
 import { addDays, dateOf, fmtDate, fmtDay, fmtDur, nowTs, diffDays } from '../model/time';
@@ -139,11 +139,14 @@ export function App() {
                   </button>
                 )}
                 {(() => {
-                  // end-of-day check: tonight once Off Duty starts, or yesterday's if it was skipped
+                  // end-of-day check: once his last task of the day is done (or Off Duty starts), or yesterday's if skipped;
+                  // never for a Max Sabbath (level 1 on the Sabbath)
                   const t = new Date(nowTs()), nm = t.getHours() * 60 + t.getMinutes();
                   const off = fixedBlocks(s, today).find((b) => b.kind === 'offduty')?.start ?? 1270;
+                  const left = lib.todayItems.some((i) => i.kind === 'mission' && !i.done && i.end > nm);
+                  const ask = (d: string) => !!s.days[d]?.level && !s.days[d]?.feel && !(isSabbath(s, d) && s.days[d]?.level === 1);
                   const y = addDays(today, -1);
-                  const date = s.days[today]?.level && !s.days[today]?.feel && nm >= off ? today : s.days[y]?.level && !s.days[y]?.feel ? y : null;
+                  const date = ask(today) && (!left || nm >= off) && lib.todayItems.some((i) => i.kind === 'mission' && i.done) ? today : ask(y) ? y : null;
                   if (!date) return null;
                   return (
                     <div class="alert">

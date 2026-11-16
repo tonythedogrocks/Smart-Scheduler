@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { sample } from './fixture';
-import { forecast, layoutDay, mustToday, planSig } from '../src/model/planner';
+import { forecast, layoutDay, planSig } from '../src/model/planner';
 import { eventsOn, inWeeks } from '../src/model/schedule';
 import { afterStats, choreDue, choreInterval, exerciseCeiling, learnedLevel } from '../src/model/learn';
 import { addDays } from '../src/model/time';
@@ -365,19 +365,19 @@ describe('planner rework', () => {
     expect(need).toBeGreaterThan(0);
     expect(dl(hi)).toBeGreaterThanOrEqual(need);
   });
-  it('lock-in names the deadline driving it, with a daily amount and an end date', () => {
+  it('lock-in names the deadlines driving it, with how much has to happen today', () => {
     const s = sample(); s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
     const fc = forecast(s, at('2026-11-12T09:00'));
-    expect(fc.lockIn).toBeTruthy();
-    expect(fc.lockIn!.perDay).toBeGreaterThan(0);
-    expect(fc.lockIn!.until >= '2026-11-12').toBe(true);
+    expect(fc.lock).toBeTruthy();
+    expect(fc.lock!.final + fc.lock!.danger).toBeGreaterThan(0);
+    expect(fc.lock!.titles.length).toBeGreaterThan(0);
   });
   it('comfortable deadlines leave free time free (no lock-in)', () => {
     const s = sample();
     for (const o of s.objectives) if (o.due) o.due = '2027-06-01';
     s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
     const fc = forecast(s, at('2026-11-12T09:00'));
-    expect(fc.lockIn).toBeNull();
+    expect(fc.lock).toBeNull();
     expect(fc.days[0].lock).toBe(false);
   });
 });
@@ -411,7 +411,7 @@ describe('energy model', () => {
     s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
     const now = at('2026-11-12T09:00');
     const fc = forecast(s, now);
-    expect(fc.lockIn).toBeNull();
+    expect(fc.lock).toBeNull();
     const items = layoutDay(s, fc, '2026-11-12', now).filter((i) => i.kind === 'mission');
     const dl = items.filter((i) => i.missionId?.startsWith('exam') || i.missionId?.startsWith('course') || i.missionId?.startsWith('cert'));
     expect(dl.length).toBeGreaterThan(0);
@@ -623,21 +623,33 @@ describe('late meals', () => {
   });
 });
 
-describe('must-do blocks', () => {
-  it('marks only the blocks a deadline needs today', () => {
+describe('DANGER and FINAL STAND', () => {
+  it('plenty of time: nothing is tiered', () => {
     const s = sample();
+    for (const o of s.objectives) if (o.due) o.due = '2027-06-01';
     s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
-    const now = at('2026-11-12T10:00');
-    const items = layoutDay(s, forecast(s, now), '2026-11-12', now);
-    // plenty of time: nothing is must-do
-    expect(mustToday(s, items, now).size).toBe(0);
-    // the exam is tomorrow with more left than tomorrow alone can hold: today's exam blocks are must-do
-    const ex = s.objectives.find((o) => o.id === 'exam')!; ex.due = '2026-11-13';
-    s.missions.find((m) => m.id === 'exam-steps')!.unitsLeft = 20; s.updatedAt = Math.random();
-    const items2 = layoutDay(s, forecast(s, now), '2026-11-12', now);
-    const must = mustToday(s, items2, now);
-    expect(must.size).toBeGreaterThan(0);
-    for (const k of must) expect(s.missions.find((m) => m.id === items2.find((i) => i.key === k)!.missionId)!.objectiveId).toBe('exam');
+    const fc = forecast(s, at('2026-11-12T09:00'));
+    expect(fc.days[0].blocks.some((b) => b.tier)).toBe(false);
+  });
+  it('an exam tomorrow with more left than tomorrow can hold: some of today is FINAL STAND, and it shows on the timeline', () => {
+    const s = sample();
+    s.objectives.find((o) => o.id === 'exam')!.due = '2026-11-13';
+    s.missions.find((m) => m.id === 'exam-steps')!.unitsLeft = 20;
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
+    const now = at('2026-11-12T09:00');
+    const fc = forecast(s, now);
+    const fin = fc.days[0].blocks.filter((b) => b.tier === 'final');
+    expect(fin.length).toBeGreaterThan(0);
+    for (const b of fin) expect(s.missions.find((m) => m.id === b.missionId)!.objectiveId).toBe('exam');
+    expect(layoutDay(s, fc, '2026-11-12', now).some((i) => i.tier === 'final')).toBe(true);
+  });
+  it('DANGER and FINAL STAND work is planned even on a level-1 day', () => {
+    const s = sample();
+    s.objectives.find((o) => o.id === 'exam')!.due = '2026-11-14';
+    s.missions.find((m) => m.id === 'exam-steps')!.unitsLeft = 30;
+    s.days['2026-11-12'] = { level: 1, morningEnd: at('2026-11-12T09:00') };
+    const fc = forecast(s, at('2026-11-12T09:00'));
+    expect(fc.days[0].blocks.some((b) => b.tier)).toBe(true);
   });
 });
 
@@ -792,27 +804,6 @@ describe('done earlier', () => {
     expect(Math.round((l.end - l.start) / 60000)).toBe(25);
     expect(S().days['2026-11-12'].plan!.items.length).toBe(0);
     expect(S().missions.find((m) => m.id === 'course-lessons')!.unitsLeft).toBe(before - 1);
-  });
-});
-
-describe('lock in', () => {
-  it("a deadline that won't land at his usual pace is locked in: its daily share is planned even at level 1, marked", () => {
-    const s = sample();
-    s.days['2026-11-12'] = { level: 1, morningEnd: at('2026-11-12T09:00') };
-    const now = at('2026-11-12T09:00');
-    const fc = forecast(s, now);
-    expect(fc.commits.length).toBeGreaterThan(0);
-    const c = fc.commits[0];
-    const mine = fc.days[0].blocks.filter((b) => b.commit);
-    expect(mine.length).toBeGreaterThan(0);
-    expect(Math.abs(mine.filter((b) => s.missions.find((m) => m.id === b.missionId)!.objectiveId === c.objectiveId).reduce((a, b) => a + b.min, 0) - c.today)).toBeLessThanOrEqual(45);
-    expect(layoutDay(s, fc, '2026-11-12', now).some((i) => i.commit)).toBe(true);
-  });
-  it('nothing is locked in when everything lands at his usual pace', () => {
-    const s = sample();
-    for (const o of s.objectives) o.due = undefined;
-    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
-    expect(forecast(s, at('2026-11-12T09:00')).commits.length).toBe(0);
   });
 });
 

@@ -11,7 +11,6 @@ export interface Objective {
   riskNote?: string;       // shown only when the deadline is genuinely at risk
   dependsOn?: string[];    // lands when these objectives land
   done?: boolean; doneAt?: string;
-  committed?: string;      // date he committed to it: its daily amount happens whatever his level
 }
 
 export interface Mission {
@@ -115,7 +114,7 @@ export interface Settings {
 
 /** A day from the earlier app: time blocks with an energy signal (1 = finished on pace, 0.2 = missed). */
 /** A planned mission block, as laid out when today's plan was fixed. */
-export interface PlanSnap { key: string; missionId: string; start: number; end: number; title: string; sub?: string; detail?: string; units?: number; baseMin?: number; min?: number; step?: number; commit?: boolean }
+export interface PlanSnap { key: string; missionId: string; start: number; end: number; title: string; sub?: string; detail?: string; units?: number; baseMin?: number; min?: number; step?: number; tier?: 'final' | 'danger' }
 
 export interface PriorDay { id: string; t?: number; date: string; level?: number; blocks: { s: number; e: number; v: number }[] }
 

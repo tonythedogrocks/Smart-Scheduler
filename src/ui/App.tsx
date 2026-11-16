@@ -73,7 +73,7 @@ export function App() {
     const sig = planSig(S(), today);
     if (d.plan?.sig === sig) return;
     const items: PlanSnap[] = lib.todayItems.filter((i) => i.kind === 'mission' && !i.done && !i.running && i.missionId)
-      .map((i) => ({ key: i.key, missionId: i.missionId!, start: i.start, end: i.end, title: i.title, sub: i.sub, detail: i.detail, units: i.units, baseMin: i.baseMin, min: i.min, step: i.step, ...(i.commit ? { commit: true } : {}) }));
+      .map((i) => ({ key: i.key, missionId: i.missionId!, start: i.start, end: i.end, title: i.title, sub: i.sub, detail: i.detail, units: i.units, baseMin: i.baseMin, min: i.min, step: i.step, ...(i.tier ? { tier: i.tier } : {}) }));
     actions.savePlan(sig, items);
   });
   // Missed: a planned block still unstarted 5 minutes after its time. Log it (feeds the energy model) and the day re-plans.
@@ -138,13 +138,13 @@ export function App() {
                     <Arrow size={26} />
                   </button>
                 )}
-                {lib.fc.commits.length > 0 && (() => {
-                  const cs = lib.fc.commits, tot = cs.reduce((a, c) => a + c.today, 0), done = cs.reduce((a, c) => a + Math.min(c.done, c.today), 0);
+                {lib.fc.lock && (() => {
+                  const k = lib.fc.lock!;
                   return (
                     <div class="alert lock">
                       <span class="k">LOCK IN</span>
-                      <span>{tot === 0 ? 'Nothing today (rest day).' : done >= tot ? `Today's share is done.` : `Today: about ${fmtDur(tot - done)} left${done ? ` (${fmtDur(done)} done)` : ''}, whatever your level. Those blocks are marked MUST.`}</span>
-                      {cs.map((c) => <span style="font-size:14px">{c.title}{c.today ? ` · ${fmtDur(c.today)} today` : ''} · until {fmtDate(c.until)}</span>)}
+                      <span>{k.final ? `FINAL STAND: about ${fmtDur(k.final)} today, or the deadline is lost. ` : ''}{k.danger ? `DANGER: about ${fmtDur(k.danger)} today, or the days after get harder than you can keep up.` : ''}</span>
+                      <span style="font-size:14px">{k.titles.join(' · ')}</span>
                     </div>
                   );
                 })()}
@@ -223,8 +223,8 @@ export function App() {
               {issue.chapters.flatMap((ch, ci) => ch.panels.map((p) => ({ p, ci }))).map(({ p, ci }) => (
                 <li class={`${p.now ? 'is-now' : ''} ${p.done ? 'is-done' : ''} ${p.past && !p.done && !p.now ? 'is-past' : ''}`}>
                   <span class="tl-time">{p.time || p.h}</span>
-                  <button type="button" class={`tl-card ${p.fixed ? 'fixed' : ''} ${p.must && !p.done ? 'is-must' : ''}`} style={p.color && !p.done && !p.now ? `border-left:10px solid ${p.color}` : ''} onClick={() => go({ view: 'panel', ch: ci, p: p.key })}>
-                    {(p.kick || p.must) && <span class="tl-kick">{p.must && <span class="must">MUST</span>}{p.kick}</span>}
+                  <button type="button" class={`tl-card ${p.fixed ? 'fixed' : ''} ${p.tier && !p.done ? `is-must ${p.tier}` : ''}`} style={p.color && !p.done && !p.now ? `border-left:10px solid ${p.color}` : ''} onClick={() => go({ view: 'panel', ch: ci, p: p.key })}>
+                    {(p.kick || p.tier) && <span class="tl-kick">{p.tier && <span class={`must ${p.tier}`}>{p.tier === 'final' ? 'FINAL STAND' : 'DANGER'}</span>}{p.kick}</span>}
                     <span class="tl-t">{p.t}</span>
                     {p.m && <span class="tl-m">{p.m}</span>}
                     {(p.done || p.now || p.running) && <span class="tag" style={`color:${p.done ? '#1B7A44' : '#B3231A'};border-color:${p.done ? '#1B7A44' : '#B3231A'}`}>{p.done ? 'DONE' : p.running ? 'GOING' : 'NOW!'}</span>}

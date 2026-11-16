@@ -795,9 +795,11 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   const tierMin = (xs: { missionId?: string; tier?: Tier; end: number; start: number }[]) => { const m = new Map<string, number>(); for (const x of xs) if (x.tier && x.missionId) m.set(x.missionId, (m.get(x.missionId) || 0) + x.end - x.start); return m; };
   const freshTier = tierMin(items.filter((i) => i.kind === 'mission' && !i.done)), savedTier = tierMin([...(stored?.items || []), ...items.filter((i) => i.running)]);
   const staleTier = [...freshTier].some(([id, mins]) => (savedTier.get(id) || 0) + 5 < mins);
-  if (stored && stored.sig === planSig(s, date) && !staleTier) {
-    // chore steps are always placed fresh: a saved plan never hides a due chore
-    const keep = items.filter((i) => i.kind !== 'mission' || i.done || i.running || i.key.startsWith('c:'));
+  // a due chore the saved plan doesn't have (and that isn't done today) also means the saved plan is out of date
+  const savedChores = new Set((stored?.items || []).filter((p) => p.key.startsWith('c:')).map((p) => p.missionId));
+  const staleChore = items.some((i) => i.key.startsWith('c:') && !i.done && !i.running && i.missionId && !savedChores.has(i.missionId));
+  if (stored && stored.sig === planSig(s, date) && !staleTier && !staleChore) {
+    const keep = items.filter((i) => i.kind !== 'mission' || i.done || i.running);
     const have = new Set(keep.filter((i) => i.kind === 'mission').map((i) => i.key));
     // a routine that isn't part of today's floor anymore (level or floor changed) drops out of the saved plan
     const dueIds = new Set(habitsDue(s, date, level).map((m) => m.id));

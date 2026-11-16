@@ -639,20 +639,12 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     else {
       const due = choreDue(s, m);
       if (!due || due > date) continue;
-      const off = fixed.find((x) => x.kind === 'offduty')!.start;
-      for (let t = round5(nowMin); t + steps[steps.length - 1].at + steps[steps.length - 1].min <= off; t += 5) {
-        if (steps.every((st) => slots.some(([x, y]) => x <= t + st.at && t + st.at + st.min <= y))) { anchor = t; break; }
-      }
-      // a due chore doesn't get dropped: if no free stretch fits, its 5-minute steps may share time with
-      // meals, routines or Off Duty, as long as he's home (not out at an event) and before getting ready for bed
-      if (anchor < 0) {
-        const away = fixed.filter((b) => b.kind === 'event' || b.kind === 'travel').map((b) => [b.start, b.end] as [number, number]);
-        const bed = fixed.find((x) => x.kind === 'offduty')!.end;
-        const home = (a: number, len: number) => !away.some(([x, y]) => a < y && x < a + len) && a + len <= bed;
-        const wake = fixed.find((x) => x.key === 'f:morning')!.start; // awake: never before he's up
-        for (let t = Math.max(round5(nowMin), wake); t + steps[steps.length - 1].at + steps[steps.length - 1].min <= bed; t += 5) {
-          if (steps.every((st) => home(t + st.at, st.min))) { anchor = t; break; }
-        }
+      // every step in free time, never on top of anything else; Off Duty counts as free for this, up until getting ready for bed
+      const offB = fixed.find((x) => x.kind === 'offduty')!;
+      const free = [...slots, [offB.start, offB.end] as [number, number]];
+      const wake = fixed.find((x) => x.key === 'f:morning')!.start;
+      for (let t = Math.max(round5(nowMin), wake); t + steps[steps.length - 1].at + steps[steps.length - 1].min <= offB.end; t += 5) {
+        if (steps.every((st) => free.some(([x, y]) => x <= t + st.at && t + st.at + st.min <= y))) { anchor = t; break; }
       }
       if (anchor < 0) continue; // not even that fits today: tomorrow
     }
@@ -728,7 +720,8 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   }
   let choresDone = false;
   for (const a of ordered) {
-    if (!choresDone && !a.must && !a.habit && !a.tier) { placeChores(); choresDone = true; }
+    // chores right after FINAL STAND and DANGER work: their steps are pinned to the clock, routines can fit around them
+    if (!choresDone && !a.must && !a.tier) { placeChores(); choresDone = true; }
     const m = byId.get(a.missionId); if (!m) continue;
     // biking there and back is light cardio: about an hour after a regular meal
     const ride = !!m.bike && !!m.travel;

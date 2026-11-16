@@ -766,14 +766,16 @@ describe('due chores', () => {
   });
   it('on a later day it starts once he is up, never at night', () => {
     const s = sample();
-    s.missions.push({ id: 'wash', objectiveId: '', title: 'Wash', kind: 'chore', energy: 'none', minutes: 5, minLevel: 1, everyDays: 7, lastAt: '2026-11-01', steps: [{ at: 0, min: 5, title: 'start' }, { at: 60, min: 5, title: 'move' }, { at: 140, min: 5, title: 'move again' }, { at: 220, min: 5, title: 'put away' }] } as any);
+    s.missions.push({ id: 'wash', objectiveId: '', title: 'Wash', kind: 'chore', energy: 'none', minutes: 5, minLevel: 1, everyDays: 7, lastAt: '2026-11-01', steps: [{ at: 0, min: 5, title: 'start' }, { at: 60, min: 5, title: 'dryer' }, { at: 140, min: 15, title: 'fold' }] } as any);
     s.events.push({ id: 'sh', title: 'Shift', kind: 'shift', start: 750, end: 1110, travel: 20, date: '2026-11-13' } as any);
     s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
     const now = at('2026-11-12T20:00');
     const st = layoutDay(s, forecast(s, now), '2026-11-13', now).filter((i) => i.missionId === 'wash');
-    expect(st.length).toBe(4);
+    expect(st.length).toBe(3);
     expect(st[0].start).toBeGreaterThanOrEqual(480);
-    expect(st[3].end).toBeLessThanOrEqual(730); // done before leaving for the shift
+    // never on top of anything else (the shift, travel, meals, routines)
+    const all = layoutDay(s, forecast(s, now), '2026-11-13', now).filter((i) => i.missionId !== 'wash' && (i.kind === 'mission' || i.block?.blocking) && i.block?.kind !== 'offduty' && i.block?.kind !== 'sleep');
+    for (const w of st) for (const o of all) expect(w.start < o.end && o.start < w.end).toBe(false);
   });
 });
 

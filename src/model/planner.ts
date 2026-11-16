@@ -238,7 +238,9 @@ export function forecast(s: State, now: number): Forecast {
         }
         share = Math.min(left, share * (goodDays ? 1e9 : boost.get(o.id) || 1));
         // exam day: only the free time before the exam counts for its own work
-        if (t === dueIdx) { const cut = examCut(o); if (cut !== null) share = Math.min(share, freeBefore(t, cut)); }
+        // and nothing squeezes in partly: each piece has to fit whole before the exam
+        const strict = t === dueIdx && examCut(o) !== null;
+        if (strict) share = Math.min(share, freeBefore(t, examCut(o)!));
         let ow = Math.min(rem, (owed.get(o.id) || 0) + share);
         // keep going down the chain the same day: finishing one step can unlock the next
         for (let progressed = true; progressed;) {
@@ -246,7 +248,8 @@ export function forecast(s: State, now: number): Forecast {
           for (const m of ready()) {
             const u1 = unit(m);
             const minChunk = (lft0: number) => Math.min(15, lft0 * u1);
-            while ((units.get(m.id) || 0) > 0 && ow >= Math.max(u1 * 0.5, minChunk(units.get(m.id)!)) && left >= Math.max(u1 * 0.5, minChunk(units.get(m.id)!)) && available(m, t)) {
+            const need = strict ? u1 : u1 * 0.5;
+            while ((units.get(m.id) || 0) > 0 && ow >= Math.max(need, minChunk(units.get(m.id)!)) && left >= Math.max(need, minChunk(units.get(m.id)!)) && available(m, t)) {
               const lft = units.get(m.id)!;
               let u = Math.max(1, Math.min(m.maxBlockUnits || 3, lft, Math.floor((ow + u1 * 0.5) / u1), Math.floor((left + u1 * 0.5) / u1)));
               if (m.labels?.length) { const at0 = m.labels.length - lft; while (u < lft && m.labels[at0 + u] === m.labels[at0 + u - 1]) u++; }
@@ -686,7 +689,8 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   // deadline work due sooner gets first pick of the day
   const tierRank = (x: Alloc) => (x.tier === 'final' ? 2 : x.tier === 'danger' ? 1 : 0);
   const dueOf = (x: Alloc) => (x.deadline ? s.objectives.find((o) => o.id === byId.get(x.missionId)?.objectiveId)?.due || '9999' : '9999');
-  const order = blocks.sort((a, b) => Number(!!b.must && !b.habit) - Number(!!a.must && !a.habit) || Number(!!b.habit) - Number(!!a.habit) || Number(!!b.must) - Number(!!a.must) || tierRank(b) - tierRank(a) || dueOf(a).localeCompare(dueOf(b)) || hardness(b) - hardness(a));
+  // pinned errands, then FINAL STAND and DANGER work, then routines into what's left, then the rest
+  const order = blocks.sort((a, b) => Number(!!b.must && !b.habit) - Number(!!a.must && !a.habit) || tierRank(b) - tierRank(a) || Number(!!b.habit) - Number(!!a.habit) || Number(!!b.must) - Number(!!a.must) || dueOf(a).localeCompare(dueOf(b)) || hardness(b) - hardness(a));
   const sun = s.settings.sun ? sunTimes(date, s.settings.sun.lat, s.settings.sun.lon) : null;
   /** Every start (5-min steps) that fits, scored by predicted energy; hard work takes the best, light work the dips. */
   const pick = (len: number, lo: number, fb: [number, number][], hi: number, light: boolean, outdoor = false, asap = false): { i: number; a: number } | null => {
@@ -782,7 +786,11 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   items.sort((a, b) => a.start - b.start || a.end - b.end);
   // Once the day has started, keep today's plan as it was fixed: only what changed since (done, running) differs.
   const stored = isToday && !morningOpen ? s.days[date]?.plan : undefined;
-  if (stored && stored.sig === planSig(s, date)) {
+  // a saved plan that's missing FINAL STAND or DANGER work the fresh plan has is out of date: use the fresh one
+  const tierMin = (xs: { missionId?: string; tier?: Tier; end: number; start: number }[]) => { const m = new Map<string, number>(); for (const x of xs) if (x.tier && x.missionId) m.set(x.missionId, (m.get(x.missionId) || 0) + x.end - x.start); return m; };
+  const freshTier = tierMin(items.filter((i) => i.kind === 'mission' && !i.done)), savedTier = tierMin([...(stored?.items || []), ...items.filter((i) => i.running)]);
+  const staleTier = [...freshTier].some(([id, mins]) => (savedTier.get(id) || 0) + 5 < mins);
+  if (stored && stored.sig === planSig(s, date) && !staleTier) {
     // chore steps are always placed fresh: a saved plan never hides a due chore
     const keep = items.filter((i) => i.kind !== 'mission' || i.done || i.running || i.key.startsWith('c:'));
     const have = new Set(keep.filter((i) => i.kind === 'mission').map((i) => i.key));

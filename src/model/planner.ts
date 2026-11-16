@@ -126,7 +126,7 @@ export function forecast(s: State, now: number): Forecast {
   };
 
   // ---- 1. Each day: free time, routines, comfortable capacity, predicted energy.
-  interface DayInfo { date: string; rest: boolean; level: number; avail: number; comfort: number; weight: number; routines: Alloc[]; good: number }
+  interface DayInfo { date: string; rest: boolean; level: number; avail: number; comfort: number; weight: number; routines: Alloc[]; good: number; slots: [number, number][] }
   const last = new Map(live.filter((m) => m.kind === 'habit').map((m) => [m.id, lastDone(s, m.id)]));
   const infos: DayInfo[] = [];
   for (let t = 0; t <= H; t++) {
@@ -142,7 +142,8 @@ export function forecast(s: State, now: number): Forecast {
     const brk = s.settings.breakMin ?? 10;
     let freeMin = slots.reduce((a, [x, y]) => a + (y - x >= 15 ? (y - x) * 60 / (60 + brk) : 0), 0);
     // hands-on steps of chores due (e.g. laundry) take their minutes and a break each
-    for (const c of live) if (c.kind === 'chore' && c.steps?.length && t <= 1) { const due = choreDue(s, c); if (due && due <= date && !s.logs.some((l) => l.missionId === c.id && l.date === date && l.done && l.step === c.steps!.length - 1)) freeMin -= c.steps.reduce((a, st) => a + st.min + brk, 0); }
+    // (only on the first of today/tomorrow it's due: if it happens today it isn't due again tomorrow)
+    for (const c of live) if (c.kind === 'chore' && c.steps?.length && t <= 1) { const due = choreDue(s, c); if (due && due <= date && !(t === 1 && due <= today) && !s.logs.some((l) => l.missionId === c.id && l.date === date && l.done && l.step === c.steps!.length - 1)) freeMin -= c.steps.reduce((a, st) => a + st.min + brk, 0); }
     if (t === 0 && run) freeMin -= Math.max(0, run.plannedMin * (f.get(run.missionId) || 1) - (now - run.startedAt) / 60000);
     const routines: Alloc[] = [];
     for (const m of habitsDue(s, date, level, last)) {
@@ -174,7 +175,7 @@ export function forecast(s: State, now: number): Forecast {
     const weight = rest || avail <= 0 || paceComfort <= 0 ? 0 : Math.max(paceComfort, avail * 0.25) * span;
     // what a day at its predicted level holds (today: what's left of today at the level he reported)
     const good = rest ? 0 : t === 0 ? comfort : paceComfort;
-    infos.push({ date, rest, level, avail, comfort, weight, routines, good });
+    infos.push({ date, rest, level, avail, comfort, weight, routines, good, slots });
   }
 
   // ---- 2. Deadline work: paced across the whole horizon toward a safe date before each due date.
@@ -187,6 +188,13 @@ export function forecast(s: State, now: number): Forecast {
     safeOf.set(o.id, Math.max(0, dueIdx - buffer - maxTail));
   }
   const order = [...deadlineObjs].sort((x, y) => safeOf.get(x.id)! - safeOf.get(y.id)!);
+  /** On a deadline's own day, its work has to be done before its exam starts (travel included); minutes from midnight. */
+  const examCut = (o: Objective): number | null => {
+    const ex = eventsOn(s, o.due!).filter((e) => e.kind === 'exam');
+    return ex.length ? Math.min(...ex.map((e) => e.start - e.travel)) : null;
+  };
+  /** Usable free minutes on day t before a cutoff. */
+  const freeBefore = (t: number, cut: number) => infos[t].slots.reduce((a, [x, y]) => { const e = Math.min(y, cut); return a + (e - x >= 15 ? (e - x) * 60 / (60 + (s.settings.breakMin ?? 10)) : 0); }, 0);
   const avgW = infos.reduce((a, d) => a + d.weight, 0) / Math.max(1, infos.length);
 
   interface Sim { units: Map<string, number>; doneIdx: Map<string, number>; days: { blocks: Alloc[]; deadline: number; perObj: Map<string, number> }[] }
@@ -229,6 +237,8 @@ export function forecast(s: State, now: number): Forecast {
           share = denom > 0 ? (rem * d.weight) / denom : rem;
         }
         share = Math.min(left, share * (goodDays ? 1e9 : boost.get(o.id) || 1));
+        // exam day: only the free time before the exam counts for its own work
+        if (t === dueIdx) { const cut = examCut(o); if (cut !== null) share = Math.min(share, freeBefore(t, cut)); }
         let ow = Math.min(rem, (owed.get(o.id) || 0) + share);
         // keep going down the chain the same day: finishing one step can unlock the next
         for (let progressed = true; progressed;) {
@@ -327,25 +337,37 @@ export function forecast(s: State, now: number): Forecast {
     const startable = (m: Mission) => (!m.notBefore || today >= m.notBefore) && [...(m.after || []), ...(m.afterNoWait || [])].every((a) => !byId.get(a) || done0.has(a) || todayUnits.has(a));
     const candidates = live.filter((m) => m.kind === 'work' && !m.errand && (units0.get(m.id) || 0) > 0 && (todayUnits.has(m.id) || startable(m))
       && deadlineObjs.some((o) => o.id === m.objectiveId));
+    /** Does task `id` wait (directly or down the chain) on task `on`? */
+    const waitsOn = (id: string, on: string, seen = new Set<string>()): boolean => {
+      if (seen.has(id)) return false; seen.add(id);
+      const m = byId.get(id);
+      return [...(m?.after || []), ...(m?.afterNoWait || [])].some((a) => a === on || waitsOn(a, on, seen));
+    };
     for (const m of candidates) {
       const o = deadlineObjs.find((x) => x.id === m.objectiveId)!;
       const planned = todayUnits.get(m.id) || 0;
       const cap = Math.min(units0.get(m.id)!, planned + Math.max(0, Math.floor(room / unit(m))));
+      // FINAL STAND outranks routines and chores: it may use any free time left today
+      const rawRoom = infos[0].slots.reduce((a, [x, y]) => a + (y - x), 0) - day0.deadline;
+      const capFinal = Math.min(units0.get(m.id)!, planned + Math.max(0, Math.floor(rawRoom / unit(m))));
       /** Does the deadline hold if only k units of this task happen today (the rest of today's plan does)? */
       const holds = (k: number, goodDays: boolean) => {
         const u = new Map(units0), dn = new Map(done0);
-        for (const [id, n] of todayUnits) if (id !== m.id) { u.set(id, Math.max(0, (u.get(id) || 0) - n)); if (!u.get(id)) dn.set(id, 0); }
+        // the rest of today's plan happens, except what can't happen without this task done first
+        const skipped = k < units0.get(m.id)!;
+        for (const [id, n] of todayUnits) if (id !== m.id && !(skipped && waitsOn(id, m.id))) { u.set(id, Math.max(0, (u.get(id) || 0) - n)); if (!u.get(id)) dn.set(id, 0); }
         u.set(m.id, Math.max(0, units0.get(m.id)! - k)); if (!u.get(m.id)) dn.set(m.id, 0);
         const target = goodDays ? safeOf.get(o.id)! : diffDays(today, o.due!);
         const d = landOf(simulate(new Map(), new Set(), goodDays, 1, u, dn), o);
         return d === null ? target > H : d <= target; // past the planning horizon: not urgent yet
       };
       const fewest = (goodDays: boolean) => {
+        const top = goodDays ? cap : capFinal;
         if (holds(0, goodDays)) return 0;
         // even all of it today isn't enough: for the deadline itself, all of it (HEADS UP says so);
         // for keeping later days at their predicted level, nothing today fixes it, so no DANGER (a later day gets a REQUEST)
-        if (!holds(cap, goodDays)) return goodDays ? 0 : cap;
-        let lo = 1, hi = cap;
+        if (!holds(top, goodDays)) return goodDays ? 0 : top;
+        let lo = 1, hi = top;
         while (lo < hi) { const mid = (lo + hi) >> 1; if (holds(mid, goodDays)) hi = mid; else lo = mid + 1; }
         return lo;
       };
@@ -359,6 +381,7 @@ export function forecast(s: State, now: number): Forecast {
         const add = dan - planned, min = Math.round(add * unit(m));
         day0.blocks.push({ missionId: m.id, units: add, baseMin: add * m.minutes, min, deadline: true });
         day0.deadline += min; room -= min;
+        todayUnits.set(m.id, dan);
       }
     }
     // mark today's blocks, earliest units first: FINAL STAND, then DANGER (a block is split where a tier ends)
@@ -587,6 +610,8 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   for (const [k2, v2] of preUnits) if (!usedUnits.has(k2)) usedUnits.set(k2, v2);
 
   // Chores with steps: every step needs you home, the time between steps is free.
+  // Placed after FINAL STAND and DANGER work, so a chore never breaks up time that work needs.
+  const placeChores = () => {
   for (const m of s.missions) {
     if (m.kind !== 'chore' || m.archived || (isRest(s, date) && !m.restOk)) continue;
     const steps = m.steps?.length ? m.steps : [{ at: 0, min: m.minutes, title: m.title }];
@@ -623,6 +648,8 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
       items.push({ key: `c:${m.id}:${i}`, start: at, end: at + st.min, title: st.title, sub: `${st.min} min · step ${i + 1} of ${steps.length}`, detail: 'Be home for each step. The time between steps is free.', kind: 'mission', missionId: m.id, units: 1, baseMin: st.min, min: st.min, step: i });
     });
   }
+
+  };
 
   const day = fc.days.find((d) => d.date === date)!;
   const gap = s.settings.mealGap;
@@ -683,7 +710,9 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     const i = queue.findIndex((b) => deps(b.missionId).every((d) => !queue.some((q) => q.missionId === d)));
     ordered.push(queue.splice(i < 0 ? 0 : i, 1)[0]);
   }
+  let choresDone = false;
   for (const a of ordered) {
+    if (!choresDone && !a.must && !a.habit && !a.tier) { placeChores(); choresDone = true; }
     const m = byId.get(a.missionId); if (!m) continue;
     // biking there and back is light cardio: about an hour after a regular meal
     const ride = !!m.bike && !!m.travel;
@@ -696,6 +725,8 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     let lo = 0, hi = 1e9;
     if (m.daylight && s.settings.sun) { const [rise, set] = sunTimes(date, s.settings.sun.lat, s.settings.sun.lon); lo = Math.ceil(rise / 5) * 5; hi = Math.floor(set); }
     if (m.window) { lo = Math.max(lo, m.window[0]); hi = Math.min(hi, m.window[1]); }
+    // work for an exam, on the exam's own day, has to be done before it starts
+    { const o = s.objectives.find((x) => x.id === m.objectiveId); if (o?.due === date) { const ex = eventsOn(s, date).filter((e) => e.kind === 'exam'); if (ex.length) hi = Math.min(hi, Math.min(...ex.map((e) => e.start - e.travel))); } }
     // after whatever it waits on that's on today's plan
     for (const d of deps(m.id)) for (const it of items) if (it.missionId === d) lo = Math.max(lo, it.end);
     const bad = !a.habit ? avoid.get(m.energy) : undefined;
@@ -736,6 +767,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
       if (!placed) break;
     }
   }
+  if (!choresDone) placeChores();
   // Blocks can land out of planning order (best times, gaps), so name each mission's blocks in time order.
   for (const id of usedUnits.keys()) {
     const m = byId.get(id);

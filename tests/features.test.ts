@@ -888,3 +888,15 @@ describe('answered days count more', () => {
     expect(Math.round(learnedCapacity(s, '2026-11-10')[3]!.mean)).toBe(Math.round((60 / 3 + 60 / 3 + 240) / (1 / 3 + 1 / 3 + 1)));
   });
 });
+
+describe('exam day', () => {
+  it("work for an exam is never placed after the exam on its own day", () => {
+    const s = sample();
+    s.objectives.find((o) => o.id === 'exam')!.due = '2026-11-13';
+    s.events.push({ id: 'ex', title: 'Exam', kind: 'exam', start: 600, end: 720, travel: 0, date: '2026-11-13' } as any);
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
+    const now = at('2026-11-12T20:00');
+    const items = layoutDay(s, forecast(s, now), '2026-11-13', now).filter((i) => i.missionId?.startsWith('exam'));
+    for (const i of items) expect(i.end).toBeLessThanOrEqual(600);
+  });
+});

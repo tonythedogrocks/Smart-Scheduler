@@ -193,6 +193,8 @@ export function forecast(s: State, now: number): Forecast {
     const ex = eventsOn(s, o.due!).filter((e) => e.kind === 'exam');
     return ex.length ? Math.min(...ex.map((e) => e.start - e.travel)) : null;
   };
+  /** Longest single free stretch on day t before a cutoff. */
+  const longestBefore = (t: number, cut: number) => Math.max(0, ...infos[t].slots.map(([x, y]) => Math.min(y, cut) - x));
   /** Usable free minutes on day t before a cutoff. */
   const freeBefore = (t: number, cut: number) => infos[t].slots.reduce((a, [x, y]) => { const e = Math.min(y, cut); return a + (e - x >= 15 ? (e - x) * 60 / (60 + (s.settings.breakMin ?? 10)) : 0); }, 0);
   const avgW = infos.reduce((a, d) => a + d.weight, 0) / Math.max(1, infos.length);
@@ -249,6 +251,7 @@ export function forecast(s: State, now: number): Forecast {
             const u1 = unit(m);
             const minChunk = (lft0: number) => Math.min(15, lft0 * u1);
             const need = strict ? u1 : u1 * 0.5;
+            if (strict && longestBefore(t, examCut(o)!) < u1) continue; // no single gap before the exam holds it
             while ((units.get(m.id) || 0) > 0 && ow >= Math.max(need, minChunk(units.get(m.id)!)) && left >= Math.max(need, minChunk(units.get(m.id)!)) && available(m, t)) {
               const lft = units.get(m.id)!;
               let u = Math.max(1, Math.min(m.maxBlockUnits || 3, lft, Math.floor((ow + u1 * 0.5) / u1), Math.floor((left + u1 * 0.5) / u1)));
@@ -333,7 +336,8 @@ export function forecast(s: State, now: number): Forecast {
   const todayUnits = new Map<string, number>();
   for (const b of day0.blocks) todayUnits.set(b.missionId, (todayUnits.get(b.missionId) || 0) + b.units);
   const tierUnits = new Map<string, { final: number; danger: number }>();
-  let needToday = 0; // minutes of FINAL STAND + DANGER work today, whatever level he picks
+  let needToday = 0;
+  let tierAdded = false; // minutes of FINAL STAND + DANGER work today, whatever level he picks
   if (!infos[0].rest) {
     let room = infos[0].avail - day0.deadline;
     // anything of a deadline that could be worked on today (even if the plan gave it nothing, e.g. on a level-1 day)
@@ -352,7 +356,8 @@ export function forecast(s: State, now: number): Forecast {
       const cap = Math.min(units0.get(m.id)!, planned + Math.max(0, Math.floor(room / unit(m))));
       // FINAL STAND outranks routines and chores: it may use any free time left today
       const rawRoom = infos[0].slots.reduce((a, [x, y]) => a + (y - x), 0) - day0.deadline;
-      const capFinal = Math.min(units0.get(m.id)!, planned + Math.max(0, Math.floor(rawRoom / unit(m))));
+      const longest0 = Math.max(0, ...infos[0].slots.map(([x, y]) => y - x));
+      const capFinal = longest0 < Math.min(unit(m), 15) ? planned : Math.min(units0.get(m.id)!, planned + Math.max(0, Math.floor(rawRoom / unit(m))));
       /** Does the deadline hold if only k units of this task happen today (the rest of today's plan does)? */
       const holds = (k: number, goodDays: boolean) => {
         const u = new Map(units0), dn = new Map(done0);
@@ -385,6 +390,11 @@ export function forecast(s: State, now: number): Forecast {
         day0.blocks.push({ missionId: m.id, units: add, baseMin: add * m.minutes, min, deadline: true });
         day0.deadline += min; room -= min;
         todayUnits.set(m.id, dan);
+        // the plan's own record: this much more happens today, and the task may now finish today
+        const leftAfter = Math.max(0, (sim.units.get(m.id) || 0) - add);
+        sim.units.set(m.id, leftAfter);
+        if (leftAfter === 0) sim.doneIdx.set(m.id, 0);
+        tierAdded = true;
       }
     }
     // mark today's blocks, earliest units first: FINAL STAND, then DANGER (a block is split where a tier ends)
@@ -403,6 +413,8 @@ export function forecast(s: State, now: number): Forecast {
     }
     day0.blocks = out;
   }
+  // with what FINAL STAND and DANGER added to today, re-check which deadlines still land late
+  if (tierAdded) risky = late(sim);
 
   // ---- 4. Compose each day: routines, deadline work, then flexible goals in the comfortable room left.
   const exUsed = new Map<string, number>();

@@ -58,16 +58,17 @@ export function eventsOn(s: State, date: string): Evt[] {
 }
 
 /** Wake time: 8:00, or earlier when the first commitment needs it. */
-export function wakeFor(s: State, date: string): number {
+export function wakeFor(s: State, date: string, withLate = true): number {
   const ev = eventsOn(s, date)[0];
-  const late = s.days[date]?.lateBy || 0; // what-if only: getting up this many minutes late
+  const late = withLate ? s.days[date]?.lateBy || 0 : 0; // what-if only: getting up this many minutes late
   if (!ev) return s.settings.wake + late;
   return Math.min(s.settings.wake, ev.start - ev.travel - s.settings.morningMin) + late;
 }
 
 /** Start of getting ready for bed; moves earlier when tomorrow starts early. */
 export function bedPrepFor(s: State, date: string): number {
-  return s.settings.bedPrep - (s.settings.wake - wakeFor(s, addDays(date, 1)));
+  // bedtime follows when he's meant to get up, not a what-if late start
+  return s.settings.bedPrep - (s.settings.wake - wakeFor(s, addDays(date, 1), false));
 }
 
 const overlaps = (a0: number, a1: number, b0: number, b1: number) => a0 < b1 && b0 < a1;

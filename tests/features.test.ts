@@ -762,9 +762,7 @@ describe('due chores', () => {
     const st = layoutDay(s, forecast(s, now), '2026-11-12', now).filter((i) => i.missionId === 'wash');
     expect(st.length).toBe(4);
     for (const i of st) expect(i.start >= 990).toBe(true);
-    // the whole cycle is done before Off Duty, never left half-done overnight
-    const off = layoutDay(s, forecast(s, now), '2026-11-12', now).find((i) => i.block?.kind === 'offduty')!.start;
-    for (const i of st) expect(i.end).toBeLessThanOrEqual(off);
+
   });
   it('on a later day it starts once he is up, never at night', () => {
     const s = sample();

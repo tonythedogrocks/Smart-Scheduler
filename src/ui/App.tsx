@@ -168,7 +168,7 @@ export function App() {
                   if (!lose.length) return null;
                   return (
                     <div class="alert lock">
-                      <span class="k">RED ALERT: TOMORROW MORNING</span>
+                      <span class="k">ALERT: TOMORROW MORNING</span>
                       <span>Get up on time. Starting an hour late would lose {lose.join(' and ')}.</span>
                     </div>
                   );
@@ -187,8 +187,8 @@ export function App() {
                   const o = s.objectives.find((x) => x.id === r.objectiveId)!;
                   return (
                     <button type="button" class="alert" onClick={() => go({ view: 'page', c: o.skillId, i: o.id, ch: 0, p: 'deadline' })}>
-                      <span class="k">RED ALERT: {r.title}</span>
-                      <span>{r.lands ? `Even locked in, this lands about ${fmtDate(r.lands)}, past ${fmtDate(r.due)}.` : `Even locked in, this misses ${fmtDate(r.due)}.`}{risks.length > 1 ? ` ${risks.length - 1} more at risk.` : ''}</span>
+                      <span class="k">MISSION FAILURE: {r.title}</span>
+                      <span>{r.lands ? `Even with every free hour, this lands about ${fmtDate(r.lands)}, past ${fmtDate(r.due)}.` : `Even with every free hour, this misses ${fmtDate(r.due)}.`}{risks.length > 1 ? ` ${risks.length - 1} more at risk.` : ''}</span>
                     </button>
                   );
                 })}

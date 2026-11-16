@@ -737,7 +737,9 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     // chore steps are always placed fresh: a saved plan never hides a due chore
     const keep = items.filter((i) => i.kind !== 'mission' || i.done || i.running || i.key.startsWith('c:'));
     const have = new Set(keep.filter((i) => i.kind === 'mission').map((i) => i.key));
-    for (const p of stored.items) if (!have.has(p.key)) keep.push({ ...p, kind: 'mission' });
+    // a routine that isn't part of today's floor anymore (level or floor changed) drops out of the saved plan
+    const dueIds = new Set(habitsDue(s, date, level).map((m) => m.id));
+    for (const p of stored.items) if (!have.has(p.key) && !(byId.get(p.missionId)?.kind === 'habit' && !dueIds.has(p.missionId))) keep.push({ ...p, kind: 'mission' });
     items.length = 0; items.push(...keep);
     items.sort((a, b) => a.start - b.start || a.end - b.end);
   }

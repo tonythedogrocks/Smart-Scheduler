@@ -826,3 +826,15 @@ describe('meals at events', () => {
     expect(b.find((x) => x.key === 'f:dinner')!.title).toBe('Dinner at Dinner out');
   });
 });
+
+describe('saved plan and the floor', () => {
+  it('a routine no longer in the floor drops out of a saved plan', () => {
+    const s = sample();
+    s.days['2026-11-12'] = { level: 1, morningEnd: at('2026-11-12T09:00') };
+    const hab = s.missions.find((m) => m.kind === 'habit' && m.minLevel >= 2)!;
+    s.days['2026-11-12'].plan = { sig: '', items: [{ key: 'h', missionId: hab.id, start: 900, end: 910, title: hab.title, units: 1, baseMin: 10, min: 10 }] };
+    s.days['2026-11-12'].plan!.sig = planSig(s, '2026-11-12');
+    const now = at('2026-11-12T12:00');
+    expect(layoutDay(s, forecast(s, now), '2026-11-12', now).some((i) => i.key === 'h')).toBe(false);
+  });
+});

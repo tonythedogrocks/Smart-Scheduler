@@ -840,3 +840,24 @@ describe('saved plan and the floor', () => {
     expect(layoutDay(s, forecast(s, now), '2026-11-12', now).some((i) => i.key === 'h')).toBe(false);
   });
 });
+
+describe('level requests', () => {
+  it('a day that needs more than its level gets a REQUEST with the level that holds it', async () => {
+    const { requestText } = await import('../src/model/vm');
+    const s = sample();
+    s.objectives.find((o) => o.id === 'exam')!.due = '2026-11-14';
+    s.missions.find((m) => m.id === 'exam-steps')!.unitsLeft = 30;
+    s.days['2026-11-12'] = { level: 2, morningEnd: at('2026-11-12T09:00') };
+    const fc = forecast(s, at('2026-11-12T09:00'));
+    expect(fc.requests.length).toBeGreaterThan(0);
+    for (const r of fc.requests) expect(r.level).toBeGreaterThanOrEqual(2);
+    expect(requestText(4)).toBe('REQUEST: HQ is searching for an Active Hero (level 4)');
+    expect(requestText(5)).toBe('REQUEST: HQ is searching for a Hero willing to Go Beyond (level 5)');
+  });
+  it('no requests when deadlines are comfortable', () => {
+    const s = sample();
+    for (const o of s.objectives) if (o.due) o.due = '2027-06-01';
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
+    expect(forecast(s, at('2026-11-12T09:00')).requests.length).toBe(0);
+  });
+});

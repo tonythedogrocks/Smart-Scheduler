@@ -14,7 +14,9 @@ export interface Risk { objectiveId: string; title: string; due: string; lands: 
 /** A deadline he committed to: today's share of what's left, and how much of it he's done today. */
 /** Lock-in: today has DANGER or FINAL STAND work. Minutes of each, and for which deadlines. */
 export interface Lock { final: number; danger: number; titles: string[] }
-export interface Forecast { today: string; days: DayAlloc[]; landing: Record<string, string | null>; risks: Risk[]; eased: boolean; lock: Lock | null }
+/** A day that needs a higher level than it's set or predicted at, to stay on track. */
+export interface Request { date: string; level: number }
+export interface Forecast { today: string; days: DayAlloc[]; landing: Record<string, string | null>; risks: Risk[]; eased: boolean; lock: Lock | null; requests: Request[] }
 
 export interface PlanItem {
   key: string; start: number; end: number; title: string; sub?: string; detail?: string;
@@ -318,6 +320,7 @@ export function forecast(s: State, now: number): Forecast {
   const todayUnits = new Map<string, number>();
   for (const b of day0.blocks) todayUnits.set(b.missionId, (todayUnits.get(b.missionId) || 0) + b.units);
   const tierUnits = new Map<string, { final: number; danger: number }>();
+  let needToday = 0; // minutes of FINAL STAND + DANGER work today, whatever level he picks
   if (!infos[0].rest) {
     let room = infos[0].avail - day0.deadline;
     // anything of a deadline that could be worked on today (even if the plan gave it nothing, e.g. on a level-1 day)
@@ -339,13 +342,16 @@ export function forecast(s: State, now: number): Forecast {
       };
       const fewest = (goodDays: boolean) => {
         if (holds(0, goodDays)) return 0;
-        if (!holds(cap, goodDays)) return cap; // even all of it today isn't enough: all of it, and HEADS UP says so
+        // even all of it today isn't enough: for the deadline itself, all of it (HEADS UP says so);
+        // for keeping later days at their predicted level, nothing today fixes it, so no DANGER (a later day gets a REQUEST)
+        if (!holds(cap, goodDays)) return goodDays ? 0 : cap;
         let lo = 1, hi = cap;
         while (lo < hi) { const mid = (lo + hi) >> 1; if (holds(mid, goodDays)) hi = mid; else lo = mid + 1; }
         return lo;
       };
       // a level-1 day asks for nothing but FINAL STAND
-      const fin = fewest(false), dan = infos[0].level < 1.5 ? fin : Math.max(fin, fewest(true));
+      const fin = fewest(false), danAny = Math.max(fin, fewest(true)), dan = infos[0].level < 1.5 ? fin : danAny;
+      needToday += Math.round(danAny * unit(m));
       if (!dan) continue;
       tierUnits.set(m.id, { final: fin, danger: dan });
       // the plan had less of it today than DANGER needs: add the difference
@@ -449,7 +455,17 @@ export function forecast(s: State, now: number): Forecast {
     const titles = [...new Set(tiered.map((b) => s.objectives.find((o) => o.id === byId.get(b.missionId)?.objectiveId)?.title).filter(Boolean))] as string[];
     lock = { final: tiered.filter((b) => b.tier === 'final').reduce((a, b) => a + b.min, 0), danger: tiered.filter((b) => b.tier === 'danger').reduce((a, b) => a + b.min, 0), titles };
   }
-  const v = { today, days, landing, risks, eased, lock };
+  // ---- 6. Requests: the lowest level whose amount holds what a day needs, when that's above its level.
+  // Today: what's done already plus FINAL STAND + DANGER. Later days: the deadline work the plan puts on them.
+  const levelFor = (min: number) => { for (let l = 2; l <= 5; l++) if (capacityAt(s, l, today) >= min - 1) return l; return 5; };
+  const requests: Request[] = [];
+  for (let t = 0; t < Math.min(7, days.length); t++) {
+    const need = t === 0 ? (needToday > 0 ? needToday + workMinOn(s, today) : 0) : sim.days[t].deadline;
+    if (need <= 0) continue;
+    const lv = levelFor(need), set = t === 0 ? s.days[today]?.level ?? infos[0].level : infos[t].level;
+    if (lv > set) requests.push({ date: infos[t].date, level: lv });
+  }
+  const v = { today, days, landing, risks, eased, lock, requests };
   memo = { k, v };
   return v;
 }

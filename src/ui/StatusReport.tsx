@@ -2,7 +2,8 @@ import { useState } from 'preact/hooks';
 import { S, actions, setLocal } from '../model/store';
 import { LEVELS } from '../model/seed';
 import { dateOf, fmtLong, nowTs } from '../model/time';
-import { floorText } from '../model/vm';
+import { floorText, requestText } from '../model/vm';
+import { forecast } from '../model/planner';
 import { isSabbath } from '../model/schedule';
 import { Arrow } from './bits';
 import type { Level } from '../model/types';
@@ -13,6 +14,8 @@ export function StatusReport() {
   const [picked, setPicked] = useState<number>(cur || 3);
   const sab = isSabbath(S(), today);
   const sel = LEVELS.find((l) => l.n === picked)!;
+  // what today needs, worked out as if he hadn't picked yet
+  const [req] = useState(() => { const st = S(); const probe = { ...st, days: { ...st.days, [today]: { ...(st.days[today] || {}), level: undefined } }, updatedAt: -Math.random() }; return forecast(probe as typeof st, nowTs()).requests.find((r) => r.date === today); });
   return (
     <div class="app status">
       <div style="display:flex;flex-direction:column;gap:10px;align-items:flex-start">
@@ -22,6 +25,7 @@ export function StatusReport() {
           {cur && <button class="plain" onClick={() => setLocal({ status: false })}>Close</button>}
         </div>
         <h1>SET TODAY'S LEVEL!</h1>
+        {req && <span class="caption" style="font-size:16px;transform:rotate(-1deg);background:var(--red);color:#fff">{requestText(req.level)}</span>}
       </div>
       <div class="levels" role="radiogroup" aria-label="Energy level">
         {LEVELS.map((l) => (

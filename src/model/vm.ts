@@ -47,6 +47,8 @@ function dayIssue(s: State, fc: Forecast, date: string, now: number): { issue: I
   if (isToday || isTomorrow) {
     chapters = CH.map((title) => ({ title, panels: [] as PanelVM[] }));
     const pl = fc.days.find((d) => d.date === date)?.level ?? 3;
+    const req = fc.requests.find((r) => r.date === date);
+    if (req) chapters[0].panels.push({ key: 'request', h: 'REQUEST', t: requestText(req.level), m: isToday ? 'To stay on track today.' : 'To stay on track that day.', wide: true, act: 'info', fixed: true });
     if (isTomorrow && !lv) chapters[0].panels.push({ key: 'draft', h: 'PLANNED AHEAD', t: `Planned at ${nice(levelName(Math.round(pl)))} (level ${Math.round(pl)})`, m: 'It re-plans when you report in tomorrow.', wide: true, act: 'info', fixed: true });
     if (isBackupDay(s, date)) chapters[0].panels.push({ key: 'backup', h: 'BACKUP', t: `Backup work day`, m: `This ${s.settings.restDayName} is planned like a normal day.`, wide: true, act: 'backup', date });
     for (const it of items) { const p = itemPanel(s, it, date, isToday); if (it.tier && !it.done) p.tier = it.tier; chapters[partOf(it.start % 1440 < 300 ? 1439 : it.start)].panels.push(p); }
@@ -196,4 +198,10 @@ export function floorText(s: State, date: string, level: number): string {
   const due = habitsDue(s, date, level).filter((m) => !m.notFloor);
   if (!due.length) return isRest(s, date) ? `${s.settings.restDayName}: essentials only.` : 'Rest. That is the whole job today.';
   return due.map((m) => `${habitTitle(m, level).replace(/^[^:]+:\s*/, '')} ${m.lowTitle && level <= 2 ? '' : habitMin(m, level) + ' min'}`.trim()).join(' · ');
+}
+
+/** HQ's request for a level, in the comic's words. */
+export function requestText(level: number): string {
+  const who = level >= 5 ? 'a Hero willing to Go Beyond' : level === 4 ? 'an Active Hero' : level === 3 ? 'a Hero On Duty' : 'a Hero on Standby';
+  return `REQUEST: HQ is searching for ${who} (level ${level})`;
 }

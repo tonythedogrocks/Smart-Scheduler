@@ -219,7 +219,7 @@ describe('V1 features', () => {
     const s = sample();
     const plan: [string, number, number][] = [['2026-11-02', 3, 200], ['2026-11-03', 5, 400], ['2026-11-04', 2, 60], ['2026-11-05', 4, 300], ['2026-11-06', 3, 250]];
     for (const [d, lv, m] of plan) { s.days[d] = { level: lv as any }; work(s, d, m); }
-    expect(sustainableCapacity(s, '2026-11-07')).toBe(300); // 400 was followed by a crash (60)
+    expect(sustainableCapacity(s, '2026-11-07')).toBe(330); // 400 was followed by a crash (60); 300 with nothing missed counts as at least that (+10%)
   });
   it('a push that pays off makes the next one bigger', async () => {
     const { pushSize } = await import('../src/model/learn');
@@ -859,5 +859,22 @@ describe('level requests', () => {
     for (const o of s.objectives) if (o.due) o.due = '2027-06-01';
     s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
     expect(forecast(s, at('2026-11-12T09:00')).requests.length).toBe(0);
+  });
+});
+
+describe('capacity vs following the plan', () => {
+  it('a day with nothing missed counts as a bit more; a missed block day counts as what he did; his answer adjusts it', async () => {
+    const { dayCapacity, workMinOn } = await import('../src/model/learn');
+    const s = sample();
+    s.logs.push({ id: 'a', missionId: 'course-lessons', date: '2026-11-10', start: at('2026-11-10T10:00'), end: at('2026-11-10T12:00'), plannedMin: 120, units: 4, done: true });
+    s.days['2026-11-10'] = { level: 3 };
+    const o = workMinOn(s, '2026-11-10');
+    expect(dayCapacity(s, '2026-11-10')).toBeCloseTo(o * 1.1);
+    s.days['2026-11-10'].misses = [{ m: 'course-paper', at: 900 }];
+    expect(dayCapacity(s, '2026-11-10')).toBeCloseTo(o);
+    s.days['2026-11-10'].feel = 'much';
+    expect(dayCapacity(s, '2026-11-10')).toBeCloseTo(o * 0.85);
+    s.days['2026-11-10'].feel = 'more';
+    expect(dayCapacity(s, '2026-11-10')).toBeCloseTo(o * 1.15);
   });
 });

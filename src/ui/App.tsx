@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { S, L, actions, go, setLocal, type Nav } from '../model/store';
 import { buildLibrary, type PanelVM } from '../model/vm';
 import { GRACE, planSig } from '../model/planner';
-import { eatingNow } from '../model/schedule';
+import { eatingNow, fixedBlocks } from '../model/schedule';
 import { isFresh, onSyncStatus, syncStatus } from '../model/sync';
 import type { PlanSnap } from '../model/types';
 import { addDays, dateOf, fmtDate, fmtDay, fmtDur, nowTs, diffDays } from '../model/time';
@@ -138,6 +138,25 @@ export function App() {
                     <Arrow size={26} />
                   </button>
                 )}
+                {(() => {
+                  // end-of-day check: tonight once Off Duty starts, or yesterday's if it was skipped
+                  const t = new Date(nowTs()), nm = t.getHours() * 60 + t.getMinutes();
+                  const off = fixedBlocks(s, today).find((b) => b.kind === 'offduty')?.start ?? 1270;
+                  const y = addDays(today, -1);
+                  const date = s.days[today]?.level && !s.days[today]?.feel && nm >= off ? today : s.days[y]?.level && !s.days[y]?.feel ? y : null;
+                  if (!date) return null;
+                  return (
+                    <div class="alert">
+                      <span class="k">{date === today ? 'HOW WAS TODAY?' : 'HOW WAS YESTERDAY?'}</span>
+                      <span style="font-size:14px">It teaches the app what a level-{s.days[date]!.level} day really holds.</span>
+                      <div class="row" style="margin-top:6px">
+                        <button type="button" class="small" onClick={() => actions.setFeel(date, 'much')}>Too much</button>
+                        <button type="button" class="small" onClick={() => actions.setFeel(date, 'right')}>About right</button>
+                        <button type="button" class="small" onClick={() => actions.setFeel(date, 'more')}>Room for more</button>
+                      </div>
+                    </div>
+                  );
+                })()}
                 {lib.fc.lock && (() => {
                   const k = lib.fc.lock!;
                   return (

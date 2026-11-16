@@ -70,6 +70,8 @@ function afterChange(s: State, date: string) {
 }
 
 export const actions = {
+  /** End-of-day answer: too much / about right / room for more (feeds what each level holds). */
+  setFeel(date: string, feel: 'much' | 'right' | 'more') { mutate((s) => { (s.days[date] ||= {}).feel = feel; }); },
   setLevel(level: Level) {
     mutate((s) => { const d = (s.days[today()] ||= {}); d.level = level; /* first report of the day = start of the day */ if (!d.setAt || dateOf(d.setAt) !== today()) d.setAt = nowTs(); });
     setLocal({ status: false });

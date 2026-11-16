@@ -1,6 +1,7 @@
 import type { State, Level, Mission } from './types';
 import { addDays, dateOf, diffDays, minsOf, parseD, weekStart, weekday } from './time';
 import { eventsOn, isRest, isSabbath } from './schedule';
+import { realMisses } from './energy';
 
 /** A record long enough to learn from (Start and Done tapped back to back teaches nothing). */
 export const real = (l: { start: number; end: number }) => l.end > 0 && l.end - l.start >= 60000;
@@ -22,12 +23,28 @@ export function workMinOn(s: State, date: string): number {
   return s.logs.filter((l) => l.date === date && w(l.missionId)).reduce((a, l) => a + mins(l), 0);
 }
 
+/**
+ * What a past day says about his capacity at its level, not just what the app asked of him:
+ * - he missed planned work: he hit his limit, so what he did is the measure;
+ * - he missed nothing: the plan ran out before he did, so he can do at least that, a bit more (+10%);
+ * - his end-of-day answer adjusts it: room for more +15%, too much -15% (even with nothing missed).
+ */
+export function dayCapacity(s: State, d: string): number {
+  const o = workMinOn(s, d), feel = s.days[d]?.feel;
+  const kind = new Map(s.missions.map((m) => [m.id, m.kind]));
+  const limited = realMisses(s, d).some((x) => { const k = kind.get(x.m); return k === 'work' || k === 'practice'; });
+  if (feel === 'much') return o * 0.85;
+  if (feel === 'more') return o * 1.15;
+  if (feel === 'right') return o;
+  return limited ? o : o * 1.1;
+}
+
 /** How many minutes of non-habit work a level really gets done. */
 export function learnedCapacity(s: State, today: string): Partial<Record<Level, { n: number; mean: number }>> {
   const by: Record<number, number[]> = {};
   for (const [d, r] of Object.entries(s.days)) {
     if (!r.level || d >= today || isRest(s, d)) continue;
-    (by[r.level] ||= []).push(workMinOn(s, d));
+    (by[r.level] ||= []).push(dayCapacity(s, d));
   }
   const out: Partial<Record<Level, { n: number; mean: number }>> = {};
   for (const k of Object.keys(by)) { const a = by[+k]; out[+k as Level] = { n: a.length, mean: a.reduce((x, y) => x + y, 0) / a.length }; }
@@ -40,7 +57,7 @@ function workedDays(s: State, today: string, n = 21) {
   for (let i = 1; i <= n; i++) {
     const d = addDays(today, -i), r = s.days[d];
     if (!r?.level || isRest(s, d)) continue;
-    out.push({ d, level: r.level, o: workMinOn(s, d) });
+    out.push({ d, level: r.level, o: dayCapacity(s, d) });
   }
   return out;
 }

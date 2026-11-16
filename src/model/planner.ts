@@ -809,7 +809,9 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   // a due chore the saved plan doesn't have (and that isn't done today) also means the saved plan is out of date
   const savedChores = new Set((stored?.items || []).filter((p) => p.key.startsWith('c:')).map((p) => p.missionId));
   const staleChore = items.some((i) => i.key.startsWith('c:') && !i.done && !i.running && i.missionId && !savedChores.has(i.missionId));
-  if (stored && stored.sig === planSig(s, date) && !staleTier && !staleChore) {
+  // a saved plan with a step before something it waits on is out of date too
+  const staleOrder = (stored?.items || []).some((p) => { const before = allDeps(p.missionId); return (stored?.items || []).some((q) => before.has(q.missionId) && q.start >= p.start); });
+  if (stored && stored.sig === planSig(s, date) && !staleTier && !staleChore && !staleOrder) {
     const keep = items.filter((i) => i.kind !== 'mission' || i.done || i.running);
     const have = new Set(keep.filter((i) => i.kind === 'mission').map((i) => i.key));
     // a routine that isn't part of today's floor anymore (level or floor changed) drops out of the saved plan

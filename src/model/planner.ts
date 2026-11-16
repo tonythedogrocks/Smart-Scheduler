@@ -344,7 +344,8 @@ export function forecast(s: State, now: number): Forecast {
         while (lo < hi) { const mid = (lo + hi) >> 1; if (holds(mid, goodDays)) hi = mid; else lo = mid + 1; }
         return lo;
       };
-      const fin = fewest(false), dan = Math.max(fin, fewest(true));
+      // a level-1 day asks for nothing but FINAL STAND
+      const fin = fewest(false), dan = infos[0].level < 1.5 ? fin : Math.max(fin, fewest(true));
       if (!dan) continue;
       tierUnits.set(m.id, { final: fin, danger: dan });
       // the plan had less of it today than DANGER needs: add the difference

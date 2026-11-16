@@ -643,13 +643,15 @@ describe('DANGER and FINAL STAND', () => {
     for (const b of fin) expect(s.missions.find((m) => m.id === b.missionId)!.objectiveId).toBe('exam');
     expect(layoutDay(s, fc, '2026-11-12', now).some((i) => i.tier === 'final')).toBe(true);
   });
-  it('DANGER and FINAL STAND work is planned even on a level-1 day', () => {
+  it('a level-1 day asks only for FINAL STAND, never DANGER', () => {
     const s = sample();
     s.objectives.find((o) => o.id === 'exam')!.due = '2026-11-14';
     s.missions.find((m) => m.id === 'exam-steps')!.unitsLeft = 30;
     s.days['2026-11-12'] = { level: 1, morningEnd: at('2026-11-12T09:00') };
     const fc = forecast(s, at('2026-11-12T09:00'));
-    expect(fc.days[0].blocks.some((b) => b.tier)).toBe(true);
+    expect(fc.days[0].blocks.some((b) => b.tier === 'danger')).toBe(false);
+    s.days['2026-11-12'].level = 3; s.updatedAt = Math.random();
+    expect(forecast(s, at('2026-11-12T09:00')).days[0].blocks.some((b) => b.tier)).toBe(true);
   });
 });
 

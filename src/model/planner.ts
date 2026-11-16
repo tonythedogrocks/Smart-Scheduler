@@ -801,7 +801,9 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     const have = new Set(keep.filter((i) => i.kind === 'mission').map((i) => i.key));
     // a routine that isn't part of today's floor anymore (level or floor changed) drops out of the saved plan
     const dueIds = new Set(habitsDue(s, date, level).map((m) => m.id));
-    for (const p of stored.items) if (!have.has(p.key) && !(byId.get(p.missionId)?.kind === 'habit' && !dueIds.has(p.missionId))) keep.push({ ...p, kind: 'mission' });
+    // and anything finished or removed since the plan was saved drops out too
+    const gone = (id: string) => { const m = s.missions.find((x) => x.id === id); return !m || m.archived || (m.kind === 'work' && (m.unitsLeft ?? 0) <= 0); };
+    for (const p of stored.items) if (!have.has(p.key) && !gone(p.missionId) && !(byId.get(p.missionId)?.kind === 'habit' && !dueIds.has(p.missionId))) keep.push({ ...p, kind: 'mission' });
     items.length = 0; items.push(...keep);
     items.sort((a, b) => a.start - b.start || a.end - b.end);
   }

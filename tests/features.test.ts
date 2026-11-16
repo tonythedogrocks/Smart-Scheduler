@@ -918,3 +918,17 @@ describe('red alert for tomorrow morning', () => {
     expect(lateRisk(s, now).length).toBe(1);
   });
 });
+
+describe('saved plan and finished work', () => {
+  it('blocks of a task finished or removed since the plan was saved drop out', () => {
+    const s = sample();
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
+    s.days['2026-11-12'].plan = { sig: '', items: [{ key: 'a', missionId: 'course-lessons', start: 900, end: 930, title: 'X', units: 1, baseMin: 30, min: 30 }, { key: 'b', missionId: 'course-paper', start: 960, end: 990, title: 'Y', units: 1, baseMin: 30, min: 30 }] };
+    s.missions.find((m) => m.id === 'course-lessons')!.unitsLeft = 0;
+    s.missions.find((m) => m.id === 'course-paper')!.archived = true;
+    s.days['2026-11-12'].plan!.sig = planSig(s, '2026-11-12');
+    const now = at('2026-11-12T12:00');
+    const keys = layoutDay(s, forecast(s, now), '2026-11-12', now).map((i) => i.key);
+    expect(keys.includes('a') || keys.includes('b')).toBe(false);
+  });
+});

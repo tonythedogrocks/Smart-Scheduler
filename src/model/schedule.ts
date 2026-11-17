@@ -123,6 +123,14 @@ export function fixedBlocks(s: State, date: string): Block[] {
       if (after <= hi && free(after, need)) at = after;
       else if (before >= lo && free(before, need)) at = before;
       else if (tail && free(want, len)) at = want; // no room for both: the meal still happens
+      // still nothing: the nearest free time in the window (with the dishes after if they fit, else the meal alone)
+      for (const n of tail ? [need, len] : [len]) {
+        if (at >= 0) break;
+        for (let d = 5; d <= 240 && at < 0; d += 5) {
+          if (want + d + n <= hi + len && free(want + d, n)) at = want + d;
+          else if (want - d >= lo && free(want - d, n)) at = want - d;
+        }
+      }
     }
     if (at < 0) {
       out.push({ key: `f:${meal}`, start: want, end: want, title: `${title} out`, sub: "About 1 h · can't be home in the window", kind: 'note', meal, blocking: false });

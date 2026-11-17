@@ -946,3 +946,18 @@ describe('chains with a missing step', () => {
     if (!items.some((i) => i.missionId === 'mid')) expect(items.some((i) => i.missionId === 'last')).toBe(false);
   });
 });
+
+describe('lunch between commitments', () => {
+  it('lunch finds a free gap later in the window instead of going out', async () => {
+    const { fixedBlocks } = await import('../src/model/schedule');
+    const s = sample();
+    s.settings.lunchAt = 750; s.settings.lunchMin = 30;
+    s.events.push({ id: 'sh', title: 'Shift', kind: 'shift', start: 540, end: 810, travel: 20, date: '2026-11-13' } as any);
+    s.events.push({ id: 'rv', title: 'Review', kind: 'event', start: 830, end: 860, travel: 0, date: '2026-11-13' } as any);
+    s.events.push({ id: 'ex', title: 'Exam', kind: 'exam', start: 900, end: 1050, travel: 0, date: '2026-11-13' } as any);
+    const l = fixedBlocks(s, '2026-11-13').find((b) => b.meal === 'lunch')!;
+    expect(l.kind).toBe('meal');
+    expect(l.start).toBeGreaterThanOrEqual(860);
+    expect(l.end).toBeLessThanOrEqual(900);
+  });
+});

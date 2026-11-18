@@ -144,7 +144,7 @@ export function fixedBlocks(s: State, date: string): Block[] {
   };
   // lunch at least 3 hours after breakfast: a late morning pushes it later (and stretches its window)
   const lunchWant = Math.max(day.lunchAt ?? st.lunchAt, morningEnd + 180);
-  const lunchEnd = place('lunch', lunchWant, day.lunchMin ?? st.lunchMin, 660, Math.max(870, lunchWant + 30), dish);
+  const lunchEnd = place('lunch', lunchWant, day.lunchMin ?? st.lunchMin, Math.max(660, morningEnd + 180 > (day.lunchAt ?? st.lunchAt) ? lunchWant : 660), Math.max(870, lunchWant + 150), dish);
   // Cooking: a block right before dinner that turns into dinner when it's done.
   let dinnerWant = day.dinnerAt ?? learnedDinner(s, date) ?? st.dinnerAt;
   const fam = day.cook === 'family';

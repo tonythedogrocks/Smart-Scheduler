@@ -137,7 +137,7 @@ export function buildLibrary(s: State, now: number): Library {
   const cols: CollectionVM[] = [week];
   for (const sk of s.skills) {
     const issues: IssueVM[] = s.objectives.filter((o) => o.skillId === sk.id).map((o) => {
-      const ms = s.missions.filter((m) => m.objectiveId === o.id && !m.archived);
+      const ms = chainOrder(s.missions.filter((m) => m.objectiveId === o.id && !m.archived));
       const risk = riskOf.get(o.id);
       const stand: PanelVM[] = [
         { key: 'status', h: 'STATUS', t: o.done ? `Complete${o.doneAt ? ' · ' + fmtDate(o.doneAt) : ''}` : o.status, wide: true, act: 'objective', objectiveId: o.id, done: o.done },
@@ -223,4 +223,14 @@ export function lateRisk(s: State, now: number): string[] {
   forecast(s, now); // put the real forecast back in the cache
   lateMemo = { key, titles };
   return titles;
+}
+
+/** Tasks in the order they happen: anything a task waits on comes before it (otherwise as entered). */
+function chainOrder<T extends { id: string; after?: string[]; afterNoWait?: string[] }>(ms: T[]): T[] {
+  const ids = new Set(ms.map((m) => m.id)), left = [...ms], out: T[] = [];
+  while (left.length) {
+    const i = left.findIndex((m) => [...(m.after || []), ...(m.afterNoWait || [])].every((d) => !ids.has(d) || out.some((o) => o.id === d)));
+    out.push(left.splice(i < 0 ? 0 : i, 1)[0]);
+  }
+  return out;
 }

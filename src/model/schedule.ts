@@ -142,7 +142,9 @@ export function fixedBlocks(s: State, date: string): Block[] {
     busy.push([at, at + len + (tailOk ? tail : 0)]);
     return at + len;
   };
-  const lunchEnd = place('lunch', day.lunchAt ?? st.lunchAt, day.lunchMin ?? st.lunchMin, 660, 870, dish);
+  // lunch at least 3 hours after breakfast: a late morning pushes it later (and stretches its window)
+  const lunchWant = Math.max(day.lunchAt ?? st.lunchAt, morningEnd + 180);
+  const lunchEnd = place('lunch', lunchWant, day.lunchMin ?? st.lunchMin, 660, Math.max(870, lunchWant + 30), dish);
   // Cooking: a block right before dinner that turns into dinner when it's done.
   let dinnerWant = day.dinnerAt ?? learnedDinner(s, date) ?? st.dinnerAt;
   const fam = day.cook === 'family';

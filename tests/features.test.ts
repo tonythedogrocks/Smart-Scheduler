@@ -961,3 +961,15 @@ describe('lunch between commitments', () => {
     expect(l.end).toBeLessThanOrEqual(900);
   });
 });
+
+describe('late breakfast', () => {
+  it('pushes lunch to at least 3 hours after the morning routine ends', async () => {
+    const { fixedBlocks } = await import('../src/model/schedule');
+    const s = sample();
+    s.settings.lunchAt = 750;
+    s.days['2026-11-13'] = { morningEnd: at('2026-11-13T11:53') };
+    const l = fixedBlocks(s, '2026-11-13').find((b) => b.meal === 'lunch')!;
+    expect(l.kind).toBe('meal');
+    expect(l.start).toBeGreaterThanOrEqual(713 + 180);
+  });
+});

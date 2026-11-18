@@ -973,3 +973,14 @@ describe('late breakfast', () => {
     expect(l.start).toBeGreaterThanOrEqual(713 + 180);
   });
 });
+
+describe('saved plan missing the floor', () => {
+  it('a saved plan without a routine that is part of today\'s floor rebuilds', () => {
+    const s = sample();
+    s.days['2026-11-12'] = { level: 4, morningEnd: at('2026-11-12T09:00') };
+    s.days['2026-11-12'].plan = { sig: '', items: [] };
+    s.days['2026-11-12'].plan!.sig = planSig(s, '2026-11-12');
+    const now = at('2026-11-12T10:00');
+    expect(layoutDay(s, forecast(s, now), '2026-11-12', now).some((i) => i.kind === 'mission' && s.missions.find((m) => m.id === i.missionId)?.kind === 'habit')).toBe(true);
+  });
+});

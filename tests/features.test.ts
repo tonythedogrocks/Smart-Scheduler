@@ -994,3 +994,12 @@ describe('extra dish days', () => {
     expect(fixedBlocks(s, '2026-11-12').some((b) => b.key.startsWith('f:dishes'))).toBe(true);
   });
 });
+
+describe('extended routines', () => {
+  it('the longer version of a routine says so in its name', async () => {
+    const { habitTitle } = await import('../src/model/planner');
+    const m = { title: 'Stretching', minutesAt5: 20, longFrom: 4, minutes: 10 } as any;
+    expect(habitTitle(m, 3)).toBe('Stretching');
+    expect(habitTitle(m, 4)).toBe('Stretching (extended)');
+  });
+});

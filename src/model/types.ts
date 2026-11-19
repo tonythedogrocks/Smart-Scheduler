@@ -94,6 +94,8 @@ export interface DayRec {
 
 export interface Settings {
   wake: number; morningMin: number; bedPrep: number; offDutyMin: number;
+  bedPrepMin?: number;      // getting ready for bed, before lights out (default 50)
+  sleepMin?: number;        // time in bed (default 8 h)
   lunchAt: number; lunchMin: number; dinnerAt: number; dinnerMin: number;
   dishesMin: number; mealGap: number; breakMin: number;
   bigMealGap: number;       // minutes to wait before a workout after a large meal

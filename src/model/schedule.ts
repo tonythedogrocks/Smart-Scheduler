@@ -169,7 +169,8 @@ export function fixedBlocks(s: State, date: string): Block[] {
     if (dinnerEnd > 0 && (tailFits.has('dinner') || day.ate?.dinner)) out.push(dishBlock('f:dishes2', 'dinner', dinnerEnd, 'After dinner'));
   }
   out.push({ key: 'f:off', start: off, end: prep, title: 'Off Duty', sub: 'Protected · 2 h before bed', kind: 'offduty', blocking: true });
-  out.push({ key: 'f:sleep', start: prep + 50, end: prep + 50 + 480, title: 'Asleep', sub: '8 h', kind: 'sleep', blocking: true });
+  const inBed = prep + (st.bedPrepMin ?? 50), sleepLen = st.sleepMin ?? 480;
+  out.push({ key: 'f:sleep', start: inBed, end: inBed + sleepLen, title: 'Asleep', sub: `${Math.round(sleepLen / 6) / 10} h`, kind: 'sleep', blocking: true });
   return out.sort((a, b) => a.start - b.start || a.end - b.end);
 }
 

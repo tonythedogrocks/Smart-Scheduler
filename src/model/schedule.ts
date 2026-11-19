@@ -96,7 +96,8 @@ export function fixedBlocks(s: State, date: string): Block[] {
   const day = s.days[date] || {};
   const tailFits = new Set<string>();
   const dishLen = learnedDishes(s);
-  const dish = st.dishDays.includes(weekday(date)) ? dishLen : 0;
+  const dishToday = st.dishDays.includes(weekday(date)) || !!day.dishDuty;
+  const dish = dishToday ? dishLen : 0;
   // tail: time that must follow the meal right away (dishes), so the meal is placed where both fit
   const place = (meal: 'lunch' | 'dinner', want: number, len: number, lo: number, hi: number, tail = 0) => {
     const title = meal === 'lunch' ? 'Lunch' : 'Dinner';
@@ -163,7 +164,7 @@ export function fixedBlocks(s: State, date: string): Block[] {
     return { key, start: a, end: e, title: 'Dishes', sub: r?.end !== undefined ? `${Math.round(e - a)} min` : `${label} · about ${dishLen} min`, kind: 'routine', blocking: true };
   };
   const wd = weekday(date);
-  if (st.dishDays.includes(wd)) {
+  if (dishToday) {
     if (lunchEnd > 0 && (tailFits.has('lunch') || day.ate?.lunch)) out.push(dishBlock('f:dishes1', 'lunch', lunchEnd, 'After lunch'));
     if (dinnerEnd > 0 && (tailFits.has('dinner') || day.ate?.dinner)) out.push(dishBlock('f:dishes2', 'dinner', dinnerEnd, 'After dinner'));
   }

@@ -984,3 +984,13 @@ describe('saved plan missing the floor', () => {
     expect(layoutDay(s, forecast(s, now), '2026-11-12', now).some((i) => i.kind === 'mission' && s.missions.find((m) => m.id === i.missionId)?.kind === 'habit')).toBe(true);
   });
 });
+
+describe('extra dish days', () => {
+  it('a date marked for dishes gets dishes after its meals', async () => {
+    const { fixedBlocks } = await import('../src/model/schedule');
+    const s = sample(); s.settings.dishDays = [];
+    expect(fixedBlocks(s, '2026-11-12').some((b) => b.key.startsWith('f:dishes'))).toBe(false);
+    s.days['2026-11-12'] = { dishDuty: true };
+    expect(fixedBlocks(s, '2026-11-12').some((b) => b.key.startsWith('f:dishes'))).toBe(true);
+  });
+});

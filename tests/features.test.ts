@@ -1003,3 +1003,18 @@ describe('extended routines', () => {
     expect(habitTitle(m, 4)).toBe('Stretching (extended)');
   });
 });
+
+describe("open-ended outing", () => {
+  it("blocks the day until he's back, then dishes first and the plan resumes", async () => {
+    const { fixedBlocks } = await import('../src/model/schedule');
+    const s = sample(); s.settings.dishDays = [new Date('2026-11-13T12:00').getDay()];
+    s.events.push({ id: 'fr', title: "Friend's house", kind: 'event', start: 840, end: 900, travel: 30, bike: true, untilBack: true, meals: ['lunch', 'dinner'], date: '2026-11-13' } as any);
+    let b = fixedBlocks(s, '2026-11-13');
+    const ev = b.find((x) => x.key === 'f:ev:fr')!;
+    expect(ev.end).toBeGreaterThan(1200); // runs to bedtime while away
+    s.days['2026-11-13'] = { backAt: at('2026-11-13T19:15') };
+    b = fixedBlocks(s, '2026-11-13');
+    expect(b.find((x) => x.key === 'f:ev:fr')!.end).toBe(1155 - 30);
+    expect(b.find((x) => x.key === 'f:dishes0')!.start).toBe(1155);
+  });
+});

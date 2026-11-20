@@ -161,6 +161,9 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
           </div>
         )}
         {p.act === 'choice' && p.date && p.evtId && <Choice evtId={p.evtId} date={p.date} />}
+        {p.act === 'event' && p.evtId && p.date === lib.today && s.events.find((e) => e.id === p.evtId)?.untilBack && !day.backAt && (
+          <button type="button" class="big fin" onClick={() => actions.setDay(p.date!, { backAt: nowTs() })}>I'M BACK</button>
+        )}
         {p.act === 'event' && p.evtId && p.date && p.date >= lib.today && (
           <button type="button" class="small" onClick={() => { actions.removeEvent(p.evtId!, p.date); go({ view: 'page', dir: 'out' }); }}>
             {s.events.find((e) => e.id === p.evtId)?.date ? 'Remove this event' : 'Skip it this week'}

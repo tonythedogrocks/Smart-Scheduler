@@ -79,13 +79,16 @@ export function fixedBlocks(s: State, date: string): Block[] {
   // Planning assumes he starts on time.
   const wake = wakeFor(s, date);
   const prep = bedPrepFor(s, date);
-  const off = prep - st.offDutyMin;
+  const off = prep - (s.days[date]?.offDutyMin ?? st.offDutyMin);
   // Planned length; on the day it lasts until he taps Done (see layoutDay).
   const mEnd = s.days[date]?.morningEnd;
   const morningEnd = mEnd && dateOf(mEnd) === date ? Math.max(wake + 1, minsOf(mEnd)) : wake + st.morningMin;
   const busy: [number, number][] = [[wake, morningEnd]];
   out.push({ key: 'f:morning', start: wake, end: morningEnd, title: 'Awake, ready, breakfast', kind: 'routine', blocking: true });
-  for (const e of eventsOn(s, date)) {
+  for (const e0 of eventsOn(s, date)) {
+    // open-ended: runs to bedtime until he taps I'm back; then it ended a trip home before that
+    const ba = e0.untilBack ? s.days[date]?.backAt : undefined;
+    const e = !e0.untilBack ? e0 : { ...e0, end: ba && dateOf(ba) === date ? Math.max(e0.start, minsOf(ba) - (e0.travelBack ?? e0.travel)) : prep };
     if (e.travel) out.push({ key: `f:to:${e.id}`, start: e.start - e.travel, end: e.start, title: `Travel to ${e.title}`, sub: `${e.travel} min`, kind: 'travel', evtId: e.id, blocking: true });
     out.push({ key: `f:ev:${e.id}`, start: e.start, end: e.end, title: e.title, sub: e.note, kind: 'event', evtId: e.id, blocking: true });
     const back = e.travelBack ?? e.travel;
@@ -164,6 +167,8 @@ export function fixedBlocks(s: State, date: string): Block[] {
     return { key, start: a, end: e, title: 'Dishes', sub: r?.end !== undefined ? `${Math.round(e - a)} min` : `${label} · about ${dishLen} min`, kind: 'routine', blocking: true };
   };
   const wd = weekday(date);
+  // home from an open-ended outing where he ate: dishes first thing
+  for (const e of eventsOn(s, date)) { const ba = e.untilBack ? day.backAt : undefined; if (dishToday && ba && dateOf(ba) === date && e.meals?.length) out.push({ key: 'f:dishes0', start: minsOf(ba), end: minsOf(ba) + dishLen, title: 'Dishes', sub: `About ${dishLen} min`, kind: 'routine', blocking: true }); }
   if (dishToday) {
     if (lunchEnd > 0 && (tailFits.has('lunch') || day.ate?.lunch)) out.push(dishBlock('f:dishes1', 'lunch', lunchEnd, 'After lunch'));
     if (dinnerEnd > 0 && (tailFits.has('dinner') || day.ate?.dinner)) out.push(dishBlock('f:dishes2', 'dinner', dinnerEnd, 'After dinner'));

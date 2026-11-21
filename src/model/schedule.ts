@@ -11,7 +11,7 @@ export interface Block {
 /** The weekly rest day: essentials only. */
 /** The rest day, unless it's a backup week or he reported level 3+ that morning (then it's a normal work day). */
 /** The Sabbath: no special rules, except that until he reports a level it's planned and counted as a 1 (Max Sabbath). */
-export const isSabbath = (s: State, date: string) => s.settings.restDay !== null && weekday(date) === s.settings.restDay;
+export const isSabbath = (s: State, date: string) => s.days[date]?.sabbath ?? (s.settings.restDay !== null && weekday(date) === s.settings.restDay);
 /** No day has rest-day rules anymore (kept so older call sites read as "not a rest day"). */
 export const isRest = (_s: State, _date: string) => false;
 /** The rest day of a week that has been switched to a backup work day. */

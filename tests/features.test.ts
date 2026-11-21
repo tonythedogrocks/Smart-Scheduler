@@ -1018,3 +1018,14 @@ describe("open-ended outing", () => {
     expect(b.find((x) => x.key === 'f:dishes0')!.start).toBe(1155);
   });
 });
+
+describe('moving the Sabbath', () => {
+  it('a date can be made the Sabbath, or not, for one week', async () => {
+    const { isSabbath } = await import('../src/model/schedule');
+    const s = sample(); s.settings.restDay = 0;
+    expect(isSabbath(s, '2026-11-14')).toBe(false);
+    s.days['2026-11-14'] = { sabbath: true }; s.days['2026-11-15'] = { sabbath: false };
+    expect(isSabbath(s, '2026-11-14')).toBe(true);
+    expect(isSabbath(s, '2026-11-15')).toBe(false);
+  });
+});

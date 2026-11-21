@@ -86,6 +86,7 @@ export interface DayRec {
   t?: number; ft?: Record<string, number>; level?: Level; setAt?: number; floorAwarded?: boolean; lunchAt?: number; dinnerAt?: number; lunchMin?: number; dinnerMin?: number; starts?: Record<string, number>; cook?: boolean | 'family'; cookAt?: number; cookStart?: number; cookEnd?: number; morningEnd?: number; dinnerTap?: number;
   backAt?: number;         // when he got home from an open-ended event (timestamp)
   offDutyMin?: number;     // this day only: length of Off Duty (0 = none)
+  sabbath?: boolean;       // this date is (true) or isn't (false) the Sabbath, overriding the usual day
   dishDuty?: boolean;      // dishes after lunch and dinner on this date, even if it's not a usual dish day
   lateBy?: number;         // what-if only (never saved): minutes late getting up
   feel?: 'much' | 'right' | 'more'; // his end-of-day answer: too much / about right / room for more

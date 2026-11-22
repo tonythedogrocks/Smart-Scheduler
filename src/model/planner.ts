@@ -862,7 +862,9 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     const got = items.filter((i) => i.kind === 'mission' && !i.done && !i.running && ids.has(i.missionId || '')).reduce((a, i) => a + (i.end - i.start), 0);
     const off = fixed.find((b) => b.kind === 'offduty')!;
     const intoOff = items.some((i) => i.kind === 'mission' && !i.done && i.end > off.start && i.start < off.end); // a saved plan made with the shorter Off Duty
-    if (got + 10 < want || intoOff) {
+    // ... or the day's floor routines don't fit
+    const floorMissing = (fc.days.find((d) => d.date === date)?.blocks || []).some((b) => b.habit && !byId.get(b.missionId)?.notFloor && !items.some((i) => i.missionId === b.missionId));
+    if (got + 10 < want || intoOff || floorMissing) {
       const s2: State = { ...s, days: { ...s.days, [date]: { ...(s.days[date] || {}), offDutyMin: 60 } } };
       return layoutDay(s2, fc, date, now);
     }

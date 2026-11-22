@@ -157,7 +157,7 @@ export function fixedBlocks(s: State, date: string): Block[] {
   // Cooking: a block right before dinner that turns into dinner when it's done.
   let dinnerWant = day.dinnerAt ?? learnedDinner(s, date) ?? st.dinnerAt;
   const fam = day.cook === 'family';
-  const cookLen = cookMinutes(s, fam);
+  const cookLen = day.cookMin ?? cookMinutes(s, fam); // this day's own guess wins
   if (day.cook) {
     const cs = day.cookStart !== undefined ? minsOf(day.cookStart) : day.cookAt ?? dinnerWant - cookLen;
     const ce = day.cookEnd !== undefined ? minsOf(day.cookEnd) : cs + cookLen;

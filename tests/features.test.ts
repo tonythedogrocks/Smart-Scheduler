@@ -1029,3 +1029,11 @@ describe('moving the Sabbath', () => {
     expect(isSabbath(s, '2026-11-15')).toBe(false);
   });
 });
+
+describe('skipping a meal', () => {
+  it('a skipped lunch is not planned', async () => {
+    const { fixedBlocks } = await import('../src/model/schedule');
+    const s = sample(); s.days['2026-11-13'] = { skipMeals: ['lunch'] };
+    expect(fixedBlocks(s, '2026-11-13').some((b) => b.meal === 'lunch' && b.kind === 'meal')).toBe(false);
+  });
+});

@@ -59,7 +59,8 @@ export function eventsOn(s: State, date: string): Evt[] {
 
 /** Wake time: 8:00, or earlier when the first commitment needs it. */
 export function wakeFor(s: State, date: string, withLate = true): number {
-  const ev = eventsOn(s, date)[0];
+  // the first thing that starts after 4 AM (an overnight event carried over from yesterday isn't an early start)
+  const ev = eventsOn(s, date).find((e) => e.start - e.travel >= 240);
   const late = withLate ? s.days[date]?.lateBy || 0 : 0; // what-if only: getting up this many minutes late
   if (!ev) return s.settings.wake + late;
   return Math.min(s.settings.wake, ev.start - ev.travel - s.settings.morningMin) + late;

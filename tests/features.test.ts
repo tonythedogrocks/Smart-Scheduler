@@ -1067,3 +1067,12 @@ describe('preferred order of routines', () => {
     if (A && B) expect(B.start).toBeGreaterThanOrEqual(A.end);
   });
 });
+
+describe('overnight events', () => {
+  it("an event carried over from yesterday (starting at midnight) doesn't make the morning early", async () => {
+    const { wakeFor } = await import('../src/model/schedule');
+    const s = sample();
+    s.events.push({ id: 'tg', title: 'Holiday', kind: 'event', start: 0, end: 1200, travel: 0, date: '2026-11-13' } as any);
+    expect(wakeFor(s, '2026-11-13')).toBe(s.settings.wake);
+  });
+});

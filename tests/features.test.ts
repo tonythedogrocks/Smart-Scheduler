@@ -1037,3 +1037,20 @@ describe('skipping a meal', () => {
     expect(fixedBlocks(s, '2026-11-13').some((b) => b.meal === 'lunch' && b.kind === 'meal')).toBe(false);
   });
 });
+
+describe('Plus Ultra Off Duty', () => {
+  it('shrinks to one hour only when the planned work does not fit', () => {
+    const s = sample();
+    s.objectives.find((o) => o.id === 'exam')!.due = '2026-11-13';
+    s.missions.find((m) => m.id === 'exam-steps')!.unitsLeft = 40;
+    s.days['2026-11-12'] = { level: 5, morningEnd: at('2026-11-12T09:00') };
+    const now = at('2026-11-12T15:00');
+    const items = layoutDay(s, forecast(s, now), '2026-11-12', now);
+    const off = items.find((i) => i.block?.kind === 'offduty')!;
+    expect(off.end - off.start).toBe(60);
+    const calm = sample(); for (const o of calm.objectives) if (o.due) o.due = '2027-06-01';
+    calm.days['2026-11-12'] = { level: 5, morningEnd: at('2026-11-12T09:00') };
+    const off2 = layoutDay(calm, forecast(calm, now), '2026-11-12', now).find((i) => i.block?.kind === 'offduty')!;
+    expect(off2.end - off2.start).toBe(120);
+  });
+});

@@ -833,6 +833,20 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     || items.find((i) => !i.done && !i.past && i.block?.kind !== 'note' && i.start <= nowMin + 5 && i.end > nowMin)
     || items.find((i) => i.kind === 'mission' && !i.done && !i.running && i.start <= nowMin && nowMin < i.start + GRACE); // a little late: still this one
   if (cur) cur.now = true;
+  // Plus Ultra: if the planned work doesn't all fit, Off Duty shrinks to one hour to make room
+  if (level >= 5 && s.days[date]?.offDutyMin === undefined) {
+    // only deadline work counts: extras don't cost Off Duty
+    const dl = (fc.days.find((d) => d.date === date)?.blocks || []).filter((b) => b.deadline);
+    const ids = new Set(dl.map((b) => b.missionId));
+    const want = dl.reduce((a, b) => a + b.min, 0);
+    const got = items.filter((i) => i.kind === 'mission' && !i.done && !i.running && ids.has(i.missionId || '')).reduce((a, i) => a + (i.end - i.start), 0);
+    const off = fixed.find((b) => b.kind === 'offduty')!;
+    const intoOff = items.some((i) => i.kind === 'mission' && !i.done && i.end > off.start && i.start < off.end); // a saved plan made with the shorter Off Duty
+    if (got + 10 < want || intoOff) {
+      const s2: State = { ...s, days: { ...s.days, [date]: { ...(s.days[date] || {}), offDutyMin: 60 } } };
+      return layoutDay(s2, fc, date, now);
+    }
+  }
   return items;
 }
 

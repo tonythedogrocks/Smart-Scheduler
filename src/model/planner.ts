@@ -725,7 +725,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   const unplaced = new Set<string>();
   const queue = [...order], ordered: Alloc[] = [];
   while (queue.length) {
-    const i = queue.findIndex((b) => deps(b.missionId).every((d) => !queue.some((q) => q.missionId === d)));
+    const i = queue.findIndex((b) => [...deps(b.missionId), ...(byId.get(b.missionId)?.preferAfter || [])].every((d) => !queue.some((q) => q.missionId === d)));
     ordered.push(queue.splice(i < 0 ? 0 : i, 1)[0]);
   }
   let choresDone = false;
@@ -760,8 +760,13 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     // ... and anything with later steps of its chain on today's plan goes early, so the rest of the chain fits after it
     const urgent = !a.habit && ((dueOf(a) !== '9999' && diffDays(date, dueOf(a)) <= 2) || (!!a.tier && missedToday) || (m.kind === 'work' && hasSuccessorToday(m.id)));
     const light = (!!a.habit || m.energy === 'none') && !a.must;
-    for (const fb of soft.length ? [[...forbid, ...soft], forbid] : [forbid]) {
-      got = pick(a.min, lo, fb, hi, light, !!m.outdoor, urgent);
+    // ideally after what it prefers to follow today; if that can't fit, anywhere it can
+    const pref = items.filter((it) => it.missionId && m.preferAfter?.includes(it.missionId)).reduce((x, it) => Math.max(x, it.end), lo);
+    for (const l0 of pref > lo ? [pref, lo] : [lo]) {
+      for (const fb of soft.length ? [[...forbid, ...soft], forbid] : [forbid]) {
+        got = pick(a.min, l0, fb, hi, light, !!m.outdoor, urgent);
+        if (got) break;
+      }
       if (got) break;
     }
     const placeAt = (at: number, units: number, len: number) => {

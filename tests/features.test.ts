@@ -1054,3 +1054,16 @@ describe('Plus Ultra Off Duty', () => {
     expect(off2.end - off2.start).toBe(120);
   });
 });
+
+describe('preferred order of routines', () => {
+  it('a routine that prefers to follow another goes after it when it can', () => {
+    const s = sample();
+    const hs = s.missions.filter((m) => m.kind === 'habit' && m.minLevel <= 3 && !m.days && !m.everyDays);
+    const [a, b] = hs; b.preferAfter = [a.id];
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
+    const now = at('2026-11-12T09:00');
+    const items = layoutDay(s, forecast(s, now), '2026-11-12', now);
+    const A = items.find((i) => i.missionId === a.id), B = items.find((i) => i.missionId === b.id);
+    if (A && B) expect(B.start).toBeGreaterThanOrEqual(A.end);
+  });
+});

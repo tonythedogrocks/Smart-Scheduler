@@ -71,6 +71,7 @@ export interface Evt {
   choices?: number[];      // start times to pick between, week by week
   shiftGap?: number;       // minutes needed between a shift ending and this starting
   bike?: boolean;          // travel is by bike: counts toward weekly exercise
+  leaveWindow?: [number, number]; // the app picks the start between these (minutes from midnight)
   untilBack?: boolean;     // open-ended: lasts until he taps I'm back (DayRec.backAt)
   meals?: ('lunch' | 'dinner')[]; // meals he eats at the event (no meal planned at home)
   skip?: string[];

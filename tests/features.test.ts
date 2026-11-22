@@ -1076,3 +1076,16 @@ describe('overnight events', () => {
     expect(wakeFor(s, '2026-11-13')).toBe(s.settings.wake);
   });
 });
+
+describe('app-timed outing', () => {
+  it('starts as early as the floor allows, never on top of another event', () => {
+    const s = sample();
+    s.events.push({ id: 'dr', title: 'Doctor', kind: 'event', start: 840, end: 870, travel: 0, date: '2026-11-12' } as any);
+    s.events.push({ id: 'fr', title: 'Friends', kind: 'event', start: 1020, end: 1350, travel: 25, leaveWindow: [840, 1020], date: '2026-11-12' } as any);
+    s.days['2026-11-12'] = { level: 2, morningEnd: at('2026-11-12T09:00') };
+    const now = at('2026-11-12T09:00');
+    const ev = layoutDay(s, forecast(s, now), '2026-11-12', now).find((i) => i.block?.key === 'f:ev:fr')!;
+    expect(ev.start).toBeGreaterThanOrEqual(870 + 25);
+    expect(ev.start).toBeLessThanOrEqual(1020);
+  });
+});

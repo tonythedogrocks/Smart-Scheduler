@@ -545,6 +545,21 @@ export function planSig(s: State, date: string): string {
 
 /** Lay a day's allocation onto the clock. Today is laid from "now"; nothing is ever overdue. */
 export function layoutDay(s: State, fc: Forecast, date: string, now: number): PlanItem[] {
+  // An event he lets the app time: start it as early as possible once the day's floor and its FINAL STAND
+  // and DANGER work fit before he leaves; if they never all fit, as late as allowed.
+  const flex = eventsOn(s, date).find((e) => e.leaveWindow);
+  if (flex) {
+    const [lo, hi] = flex.leaveWindow!;
+    const len = flex.end - flex.start;
+    const at = (start: number): State => ({ ...s, events: s.events.map((e) => (e.id === flex.id ? { ...e, start, end: Math.max(start + 1, start + len), leaveWindow: undefined } : e)) });
+    const fits = (items: PlanItem[]) => {
+      const must = (fc.days.find((d) => d.date === date)?.blocks || []).filter((b) => b.habit && !byIdOf(s, b.missionId)?.notFloor || b.tier);
+      return must.every((b) => items.some((i) => i.missionId === b.missionId && (i.done || i.kind === 'mission')));
+    };
+    const others = eventsOn(s, date).filter((e) => e.id !== flex.id);
+    const clash = (t: number) => others.some((e) => t - flex.travel < e.end + (e.travelBack ?? e.travel) && e.start - e.travel < t + len);
+    for (let t = lo; t <= hi; t += 15) { if (clash(t) && t + 15 <= hi) continue; const items = layoutDay(at(t), fc, date, now); if (fits(items) || t + 15 > hi) return items; }
+  }
   const today = fc.today;
   const fixed = fixedBlocks(s, date);
   const isToday = date === today;
@@ -884,3 +899,5 @@ export function orders(items: PlanItem[]) {
   const next = items.find((x, j) => j > i && !x.done && !x.past && x.kind === 'mission' && !x.now) || null;
   return { now, next };
 }
+
+const byIdOf = (s: State, id: string) => s.missions.find((m) => m.id === id);

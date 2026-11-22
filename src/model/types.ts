@@ -48,6 +48,7 @@ export interface Mission {
   notFloor?: boolean;      // habit that isn't part of the day's floor
   form?: 'measure';
   steps?: { at: number; min: number; title: string }[]; // chore: hands-on moments, minutes from the start; must be home for each
+  dueBy?: string;          // chore: wanted by this date, sooner than its usual gap
   lastAt?: string;         // chore: last done before the app knew
   note?: string;
   doneAt?: string;

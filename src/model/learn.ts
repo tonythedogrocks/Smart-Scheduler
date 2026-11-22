@@ -292,7 +292,10 @@ export function choreLast(s: State, m: Mission): string | null {
 /** Date the chore is next needed, or null if it has never been done or dated. */
 export function choreDue(s: State, m: Mission): string | null {
   const last = choreLast(s, m);
-  return last ? addDays(last, choreInterval(s, m).days) : null;
+  const due = last ? addDays(last, choreInterval(s, m).days) : null;
+  // asked for sooner (and not done since)
+  if (m.dueBy && (!last || last < m.dueBy) && (!due || m.dueBy < due)) return m.dueBy;
+  return due;
 }
 
 

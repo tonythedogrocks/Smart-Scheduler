@@ -874,7 +874,9 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   const staleFloor = items.some((i) => i.kind === 'mission' && !i.done && !i.running && i.missionId && byId.get(i.missionId)?.kind === 'habit' && !savedIds.has(i.missionId));
   // a saved plan with a step before something it waits on is out of date too
   const staleOrder = (stored?.items || []).some((p) => { const before = allDeps(p.missionId); return (stored?.items || []).some((q) => before.has(q.missionId) && q.start >= p.start); });
-  if (stored && stored.sig === planSig(s, date) && !staleTier && !staleChore && !staleOrder && !staleFloor) {
+  // ... or one that has something past its done-by time when a fresh plan gets it in on time
+  const staleBy = (stored?.items || []).some((p) => { const by = byId.get(p.missionId)?.doneBy; if (by === undefined || p.end <= by) return false; const f = items.find((i) => i.missionId === p.missionId && !i.done); return !!f && f.end <= by; });
+  if (stored && stored.sig === planSig(s, date) && !staleTier && !staleChore && !staleOrder && !staleFloor && !staleBy) {
     const keep = items.filter((i) => i.kind !== 'mission' || i.done || i.running);
     const have = new Set(keep.filter((i) => i.kind === 'mission').map((i) => i.key));
     // a routine that isn't part of today's floor anymore (level or floor changed) drops out of the saved plan

@@ -680,9 +680,16 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
       }
       if (anchor < 0) continue; // not even that fits today: tomorrow
     }
+    // each step is timed from when the step before it was actually done (a late step pushes the rest back)
+    const doneAt = new Map<number, number>();
+    for (const l of s.logs) if (l.missionId === m.id && l.date === date && l.done && l.step !== undefined) doneAt.set(l.step, Math.max(doneAt.get(l.step) ?? 0, minsOf(l.end)));
+    let prevEnd = anchor, prevAt = 0;
     steps.forEach((st, i) => {
+      if (doneAt.has(i)) { prevEnd = doneAt.get(i)!; prevAt = st.at; return; }
       if (doneSteps.has(i) || (run?.missionId === m.id && run.step === i)) return;
-      const at = Math.max(anchor + st.at, i === 0 ? 0 : round5(nowMin));
+      const due = i === 0 ? anchor : prevEnd + (st.at - prevAt) - (doneAt.has(i - 1) ? steps[i - 1].min : 0);
+      const at = Math.max(due, i === 0 ? 0 : round5(nowMin));
+      prevEnd = at + st.min; prevAt = st.at + st.min;
       carve(at, st.min);
       items.push({ key: `c:${m.id}:${i}`, start: at, end: at + st.min, title: st.title, sub: `${st.min} min · step ${i + 1} of ${steps.length}`, detail: 'Be home for each step. The time between steps is free.', kind: 'mission', missionId: m.id, units: 1, baseMin: st.min, min: st.min, step: i });
     });
@@ -845,7 +852,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   const staleTier = [...freshTier].some(([id, mins]) => (savedTier.get(id) || 0) + 5 < mins);
   // a due chore the saved plan doesn't have (and that isn't done today) also means the saved plan is out of date
   const savedChores = new Set((stored?.items || []).filter((p) => p.key.startsWith('c:')).map((p) => p.missionId));
-  const staleChore = items.some((i) => i.key.startsWith('c:') && !i.done && !i.running && i.missionId && !savedChores.has(i.missionId));
+  const staleChore = items.some((i) => i.key.startsWith('c:') && !i.done && !i.running && i.missionId && (!savedChores.has(i.missionId) || (stored?.items || []).some((p) => p.key === i.key && Math.abs(p.start - i.start) > 5)));
   // so is one missing a routine that's part of today's floor (e.g. saved before the level went up)
   const savedIds = new Set((stored?.items || []).map((p) => p.missionId));
   const staleFloor = items.some((i) => i.kind === 'mission' && !i.done && !i.running && i.missionId && byId.get(i.missionId)?.kind === 'habit' && !savedIds.has(i.missionId));

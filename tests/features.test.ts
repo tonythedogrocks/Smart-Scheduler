@@ -1117,3 +1117,16 @@ describe('a realistic week ahead', () => {
     expect(expectedBusy(s, '2026-11-12', 5)).toBe(240);
   });
 });
+
+describe('chore steps timed from the last one done', () => {
+  it('a late step pushes the next ones back instead of making them due now', () => {
+    const s = sample();
+    s.missions.push({ id: 'wash', objectiveId: '', title: 'Wash', kind: 'chore', energy: 'none', minutes: 5, minLevel: 1, everyDays: 7, lastAt: '2026-11-01', steps: [{ at: 0, min: 5, title: 'start' }, { at: 60, min: 5, title: 'dryer' }, { at: 140, min: 5, title: 'again' }, { at: 220, min: 15, title: 'fold' }] } as any);
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
+    s.logs.push({ id: 'a', missionId: 'wash', date: '2026-11-12', start: at('2026-11-12T09:15'), end: at('2026-11-12T09:20'), plannedMin: 5, units: 1, done: true, step: 0 });
+    s.logs.push({ id: 'b', missionId: 'wash', date: '2026-11-12', start: at('2026-11-12T12:50'), end: at('2026-11-12T12:55'), plannedMin: 5, units: 1, done: true, step: 1 });
+    const now = at('2026-11-12T12:56');
+    const st = layoutDay(s, forecast(s, now), '2026-11-12', now).filter((i) => i.missionId === 'wash' && !i.done);
+    expect(st[0].start).toBe(12 * 60 + 50 + 80);
+  });
+});

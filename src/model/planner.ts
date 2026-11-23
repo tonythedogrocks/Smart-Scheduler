@@ -658,9 +658,13 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
 
   // Chores with steps: every step needs you home, the time between steps is free.
   // Placed after FINAL STAND and DANGER work, so a chore never breaks up time that work needs.
-  const placeChores = () => {
+  const placeChores = (started: boolean) => {
   for (const m of s.missions) {
     if (m.kind !== 'chore' || m.archived || (isRest(s, date) && !m.restOk)) continue;
+    // a cycle already underway is pinned to the clock and goes first; one not started yet waits its turn
+    const begun = s.logs.some((l) => l.missionId === m.id && l.date === date && l.step !== undefined) || (run?.missionId === m.id);
+    // (the last step of a cycle underway, like folding, can wait, so it's placed with the rest of the day)
+    if (!begun && started) continue;
     const steps = m.steps?.length ? m.steps : [{ at: 0, min: m.minutes, title: m.title }];
     const doneSteps = new Set(s.logs.filter((l) => l.missionId === m.id && l.date === date && l.done && l.step !== undefined).map((l) => l.step!));
     if (doneSteps.has(steps.length - 1)) continue;
@@ -686,9 +690,14 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     let prevEnd = anchor, prevAt = 0;
     steps.forEach((st, i) => {
       if (doneAt.has(i)) { prevEnd = doneAt.get(i)!; prevAt = st.at; return; }
+      if (begun && (i === steps.length - 1) === started) { if (started) return; }
+      if (begun && !started && i !== steps.length - 1) { prevEnd = items.find((x) => x.key === `c:${m.id}:${i}`)?.end ?? prevEnd; prevAt = st.at + st.min; return; }
       if (doneSteps.has(i) || (run?.missionId === m.id && run.step === i)) return;
       const due = i === 0 ? anchor : prevEnd + (st.at - prevAt) - (doneAt.has(i - 1) ? steps[i - 1].min : 0);
-      const at = Math.max(due, i === 0 ? 0 : round5(nowMin));
+      const want = Math.max(due, i === 0 ? 0 : round5(nowMin));
+      // the next free moment at or after that (never on top of something else)
+      const g = i === 0 ? null : find(st.min, want);
+      const at = g ? g.a : want;
       prevEnd = at + st.min; prevAt = st.at + st.min;
       carve(at, st.min);
       items.push({ key: `c:${m.id}:${i}`, start: at, end: at + st.min, title: st.title, sub: `${st.min} min · step ${i + 1} of ${steps.length}`, detail: 'Be home for each step. The time between steps is free.', kind: 'mission', missionId: m.id, units: 1, baseMin: st.min, min: st.min, step: i });
@@ -763,10 +772,11 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     const i = queue.findIndex((b) => [...deps(b.missionId), ...(byId.get(b.missionId)?.preferAfter || [])].every((d) => !queue.some((q) => q.missionId === d)));
     ordered.push(queue.splice(i < 0 ? 0 : i, 1)[0]);
   }
+  placeChores(true);
   let choresDone = false;
   for (const a of ordered) {
     // chores right after FINAL STAND and DANGER work: their steps are pinned to the clock, routines can fit around them
-    if (!choresDone && !a.must && !a.tier) { placeChores(); choresDone = true; }
+    if (!choresDone && !a.must && !a.tier) { placeChores(false); choresDone = true; }
     const m = byId.get(a.missionId); if (!m) continue;
     // biking there and back is light cardio: about an hour after a regular meal
     const ride = !!m.bike && !!m.travel;
@@ -831,7 +841,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     }
     if (left > 0) unplaced.add(m.id); // some of it didn't fit: what waits on it can't happen today
   }
-  if (!choresDone) placeChores();
+  if (!choresDone) placeChores(false);
   // Blocks can land out of planning order (best times, gaps), so name each mission's blocks in time order.
   for (const id of usedUnits.keys()) {
     const m = byId.get(id);

@@ -9,7 +9,7 @@ export interface PanelVM {
   key: string; h: string; t: string; m?: string; d?: string; wide?: boolean;
   time?: string; kick?: string; color?: string; fixed?: boolean; past?: boolean;
   now?: boolean; done?: boolean; running?: boolean; alert?: boolean; tier?: 'final' | 'danger';
-  missionId?: string; units?: number; baseMin?: number; min?: number; step?: number;
+  missionId?: string; units?: number; baseMin?: number; min?: number; step?: number; logId?: string;
   act?: 'mission' | 'meal' | 'cook' | 'dishes' | 'morning' | 'backup' | 'choice' | 'event' | 'objective' | 'info';
   evtId?: string; date?: string; objectiveId?: string; meal?: 'lunch' | 'dinner'; editable?: boolean;
 }
@@ -25,7 +25,7 @@ function itemPanel(s: State, it: PlanItem, date: string, isToday: boolean): Pane
   const time = it.end > it.start ? `${fmtT(it.start)}–${fmtT(it.end)}` : fmtT(it.start);
   if (it.kind === 'mission') {
     const mi = s.missions.find((m) => m.id === it.missionId), ob = s.objectives.find((o) => o.id === mi?.objectiveId), sk = s.skills.find((k) => k.id === ob?.skillId);
-    return { time, kick: sk ? nice(sk.title) : mi?.kind === 'chore' ? 'Chore' : mi?.errand ? 'Errand' : undefined, color: sk?.bg, key: it.key, h: it.now && !it.running ? 'NOW' : fmtT(it.start), t: it.title, m: it.sub, d: it.detail, now: it.now, done: it.done, running: it.running, missionId: it.missionId, units: it.units, baseMin: it.baseMin, min: it.min, step: it.step, editable: s.missions.find((m) => m.id === it.missionId)?.kind === 'chore', act: 'mission', wide: it.now || (it.min || 0) >= 60, date };
+    return { time, kick: sk ? nice(sk.title) : mi?.kind === 'chore' ? 'Chore' : mi?.errand ? 'Errand' : undefined, color: sk?.bg, key: it.key, h: it.now && !it.running ? 'NOW' : fmtT(it.start), t: it.title, m: it.sub, d: it.detail, now: it.now, done: it.done, running: it.running, missionId: it.missionId, logId: it.logId, units: it.units, baseMin: it.baseMin, min: it.min, step: it.step, editable: s.missions.find((m) => m.id === it.missionId)?.kind === 'chore', act: 'mission', wide: it.now || (it.min || 0) >= 60, date };
   }
   const h = b!.kind === 'note' ? (b!.meal === 'lunch' ? 'LUNCH' : 'DINNER') : it.now && isToday ? 'NOW' : fmtT(it.start);
   return {

@@ -22,7 +22,7 @@ export interface PlanItem {
   key: string; start: number; end: number; title: string; sub?: string; detail?: string;
   kind: 'mission' | 'fixed';
   missionId?: string; units?: number; baseMin?: number; min?: number; step?: number;
-  done?: boolean; running?: boolean; now?: boolean; past?: boolean; tier?: Tier;
+  done?: boolean; running?: boolean; now?: boolean; past?: boolean; tier?: Tier; logId?: string;
   block?: Block;
 }
 
@@ -599,7 +599,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   for (const l of s.logs.filter((x) => x.date === date && x.done && x.end > 0).sort((a, b) => a.start - b.start)) {
     const m = byId.get(l.missionId); if (!m) continue;
     const stepT = l.step !== undefined ? m.steps?.[l.step]?.title : undefined;
-    items.push({ key: l.step !== undefined ? `c:${m.id}:${l.step}` : keyFor(m.id), start: minsOf(l.start), end: Math.max(minsOf(l.start) + 1, minsOf(l.end)), title: stepT || (m.kind === 'habit' ? habitTitle(m, l.level ?? level) : m.title), sub: `${Math.max(1, Math.round((l.end - l.start) / 60000))} min`, detail: m.note, kind: 'mission', missionId: m.id, done: true });
+    items.push({ key: l.step !== undefined ? `c:${m.id}:${l.step}` : keyFor(m.id), start: minsOf(l.start), end: Math.max(minsOf(l.start) + 1, minsOf(l.end)), title: stepT || (m.kind === 'habit' ? habitTitle(m, l.level ?? level) : m.title), sub: `${Math.max(1, Math.round((l.end - l.start) / 60000))} min`, detail: m.note, kind: 'mission', missionId: m.id, done: true, logId: l.id });
   }
   if (date < today) return items.sort((a, b) => a.start - b.start);
   const tIdx = diffDays(today, date);

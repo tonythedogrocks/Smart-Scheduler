@@ -1089,3 +1089,15 @@ describe('app-timed outing', () => {
     expect(ev.start).toBeLessThanOrEqual(1020);
   });
 });
+
+describe('fixing logged times', () => {
+  it('a finished task can have its start and end changed', async () => {
+    const { actions, S, adopt } = await import('../src/model/store');
+    const s = sample();
+    s.logs.push({ id: 'x1', missionId: 'course-lessons', date: '2026-11-12', start: at('2026-11-12T10:00'), end: at('2026-11-12T13:00'), plannedMin: 30, units: 1, done: true });
+    adopt(s);
+    actions.editLog('x1', 600, 640);
+    const l = S().logs.find((x) => x.id === 'x1')!;
+    expect(Math.round((l.end - l.start) / 60000)).toBe(40);
+  });
+});

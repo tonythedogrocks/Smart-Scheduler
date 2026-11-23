@@ -172,6 +172,14 @@ export const actions = {
     });
     if (got.length) toast('Achievement unlocked!');
   },
+  /** Fix the real start and end of something already logged (minutes from midnight on its day). */
+  editLog(id: string, fromMin: number, toMin: number) {
+    mutate((s) => {
+      const l = s.logs.find((x) => x.id === id); if (!l) return;
+      const base = new Date(l.start); base.setHours(0, 0, 0, 0);
+      l.start = base.getTime() + fromMin * 60000; l.end = base.getTime() + Math.max(fromMin + 1, toMin) * 60000;
+    });
+  },
   cancelRun() { mutate((s) => { s.running = undefined; }); },
   flare() {
     const id = uid();

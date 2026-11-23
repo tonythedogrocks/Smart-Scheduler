@@ -52,10 +52,17 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
         {p.act === 'mission' && mission?.form === 'measure' && !p.done && !flash && <Measure />}
         {p.act === 'mission' && mission?.form !== 'measure' && !success && !mine && (
           <>
+            {mission?.kind === 'chore' ? (
+              // a chore step is a quick tap: no timer running through the wait between steps
+              <button type="button" class="big fin" disabled={!!run} onClick={() => { const t = new Date(nowTs()), nm = t.getHours() * 60 + t.getMinutes(), len = p.min || 5; actions.doneEarlier(p.missionId!, 1, len, nm - len, nm, p.step, p.key); setFlash(true); }}>
+                <span>DONE!</span>
+              </button>
+            ) : (
             <button type="button" class="big go" disabled={!!run} onClick={() => actions.start(p.missionId!, p.units || 1, p.baseMin || mission?.minutes || 10, p.step, p.key)}>
               <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z" /></svg>
               <span>START!</span>
             </button>
+            )}
             {run && <span class="soft" style="font-size:14px;text-align:center">Another {sab ? 'task' : 'mission'} is in progress. Finish or stop it first.</span>}
             {p.date === lib.today && !p.done && <Earlier p={p} />}
           </>
@@ -74,6 +81,21 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
         {success && (
           <>
             <div class="burst"><div>{sab ? <>DONE.</> : <>MISSION<br />SUCCESS!</>}</div></div>
+            {(() => {
+              // the real times can be fixed after the fact
+              const l = p.logId ? s.logs.find((x) => x.id === p.logId) : [...s.logs].reverse().find((x) => x.missionId === p.missionId && x.done && (p.step === undefined || x.step === p.step));
+              if (!l || l.end <= 0) return null;
+              const hm = (ts: number) => { const d0 = new Date(ts); return d0.getHours() * 60 + d0.getMinutes(); };
+              const box = 'height:44px;padding:0 8px;border:3px solid var(--ink);border-radius:6px;font-weight:700';
+              return (
+                <div class="row">
+                  <span style="font-size:15px">From</span>
+                  <input type="time" aria-label="Started at" value={toHM(hm(l.start))} style={box} onChange={(e) => { const v = (e.target as HTMLInputElement).value; if (v) actions.editLog(l.id, fromHM(v), hm(l.end)); }} />
+                  <span style="font-size:15px">to</span>
+                  <input type="time" aria-label="Finished at" value={toHM(hm(l.end))} style={box} onChange={(e) => { const v = (e.target as HTMLInputElement).value; if (v) actions.editLog(l.id, hm(l.start), fromHM(v)); }} />
+                </div>
+              );
+            })()}
             {nextUp && p.date === lib.today && (
               <button type="button" class="small" style="align-self:center" onClick={() => { setFlash(false); go({ view: 'panel', c: 'week', i: lib.today, ch: Math.max(0, lib.cols[0].issues.find((i) => i.key === lib.today)!.chapters.findIndex((c) => c.panels.some((x) => x.key === nextUp.key))), p: nextUp.key }); }}>
                 Next: {nextUp.title} · {fmtT(nextUp.start)}

@@ -343,3 +343,17 @@ export function afterStats(s: State) {
 export function bodyFat(neck: number, navel: number, height: number) {
   return 86.01 * Math.log10(navel - neck) - 70.041 * Math.log10(height) + 36.76;
 }
+
+/**
+ * Plans that come up during the week: on average, how many minutes of one-off events (not weekly ones,
+ * travel included) each weekday has had, from the past 8 weeks. Needs 2 of that weekday to count.
+ */
+export function expectedBusy(s: State, today: string, wd: number): number {
+  const xs: number[] = [];
+  for (let i = 1; i <= 56; i++) {
+    const d = addDays(today, -i);
+    if (weekday(d) !== wd || !s.days[d]?.level) continue; // only days he actually used the app
+    xs.push(s.events.filter((e) => e.date === d && e.kind !== 'exam').reduce((a, e) => a + (e.end - e.start) + e.travel + (e.travelBack ?? e.travel), 0));
+  }
+  return xs.length >= 2 ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
+}

@@ -1,8 +1,8 @@
 import type { State, Mission, Level, Objective } from './types';
 import { addDays, dateOf, diffDays, minsOf, weekStart, weekday } from './time';
 import { energyBetween, predictedCurve, realMisses } from './energy';
-import { eatingNow, eventsOn, fixedBlocks, freeSlots, isRest, sunTimes, type Block } from './schedule';
-import { afterStats, weekdayFactor, learnedLevel, capacityAt, choreDue, exerciseCeiling, exerciseMinWeek, factor, flareSpike, isExercise, partOf, predictLevel, workMinOn } from './learn';
+import { eatingNow, eventsOn, fixedBlocks, holidayName, freeSlots, isRest, sunTimes, type Block } from './schedule';
+import { afterStats, expectedBusy, weekdayFactor, learnedLevel, capacityAt, choreDue, exerciseCeiling, exerciseMinWeek, factor, flareSpike, isExercise, partOf, predictLevel, workMinOn } from './learn';
 
 /** tier: 'final' = skip it and the deadline is lost; 'danger' = skip it and the days after get harder than he can sustain. */
 export type Tier = 'final' | 'danger';
@@ -130,7 +130,7 @@ export function forecast(s: State, now: number): Forecast {
   };
 
   // ---- 1. Each day: free time, routines, comfortable capacity, predicted energy.
-  interface DayInfo { date: string; rest: boolean; level: number; avail: number; comfort: number; weight: number; routines: Alloc[]; good: number; slots: [number, number][] }
+  interface DayInfo { date: string; rest: boolean; level: number; avail: number; comfort: number; weight: number; routines: Alloc[]; good: number; slots: [number, number][]; max: number }
   const last = new Map(live.filter((m) => m.kind === 'habit').map((m) => [m.id, lastDone(s, m.id)]));
   const infos: DayInfo[] = [];
   for (let t = 0; t <= H; t++) {
@@ -167,6 +167,13 @@ export function forecast(s: State, now: number): Forecast {
     }
     let comfort = capacityAt(s, level, today, t === 0) * (t === 0 ? 1 : weekdayFactor(s, today, weekday(date)));
     if (t === 0) comfort -= workMinOn(s, date) + (run && byId.get(run.missionId)?.kind !== 'habit' ? run.plannedMin : 0);
+    // the future isn't as empty as it looks: hold back the one-off plans that usually come up on this weekday
+    // (minus what's already known that day), and on a holiday with no plans yet, about half the free time
+    if (t >= 1) {
+      const known = eventsOn(s, date).filter((e) => e.date).reduce((a, e) => a + (e.end - e.start) + e.travel + (e.travelBack ?? e.travel), 0);
+      freeMin -= Math.max(0, expectedBusy(s, today, weekday(date)) - known);
+      if (holidayName(date) && !eventsOn(s, date).some((e) => e.date)) freeMin *= 0.5;
+    }
     const avail = Math.max(0, freeMin);
     comfort = Math.max(0, Math.min(comfort, avail));
     // pacing judges unreported days at their predicted level, never the optimistic preview level
@@ -179,7 +186,11 @@ export function forecast(s: State, now: number): Forecast {
     const weight = rest || avail <= 0 || paceComfort <= 0 ? 0 : Math.max(paceComfort, avail * 0.25) * span;
     // what a day at its predicted level holds (today: what's left of today at the level he reported)
     const good = rest ? 0 : t === 0 ? comfort : paceComfort;
-    infos.push({ date, rest, level, avail, comfort, weight, routines, good, slots });
+    // max effort (FINAL STAND and MISSION FAILURE): a Plus Ultra day can also take an hour of Off Duty
+    const offB = fixed.find((b) => b.kind === 'offduty');
+    const spare = !offB ? 0 : t === 0 ? Math.max(0, Math.min(60, offB.start + 60 - Math.max(from, offB.start))) : 60; // today: only what's left of that hour
+    const max = avail + spare * 60 / (60 + brk);
+    infos.push({ date, rest, level, avail, comfort, weight, routines, good, slots, max });
   }
 
   // ---- 2. Deadline work: paced across the whole horizon toward a safe date before each due date.
@@ -208,7 +219,7 @@ export function forecast(s: State, now: number): Forecast {
    * goodDays: each day holds only what its predicted level holds, not every free minute.
    * from/startUnits/startDone: a what-if starting on a later day with some work already done.
    */
-  const simulate = (boost: Map<string, number>, riskSet: Set<string>, goodDays = false, from = 0, startUnits = units0, startDone = done0): Sim => {
+  const simulate = (boost: Map<string, number>, riskSet: Set<string>, goodDays = false, from = 0, startUnits = units0, startDone = done0, maxEffort = false): Sim => {
     const units = new Map(startUnits), doneIdx = new Map(startDone), owed = new Map<string, number>();
     const available = (m: Mission, t: number) => (!m.notBefore || addDays(today, t) >= m.notBefore)
       && (m.afterNoWait || []).every((a) => !byId.get(a) || (doneIdx.get(a) !== undefined && doneIdx.get(a)! <= t)) && (m.after || []).every((a) => {
@@ -222,7 +233,7 @@ export function forecast(s: State, now: number): Forecast {
     for (let t = 0; t < from; t++) out.push({ blocks: [], deadline: 0, perObj: new Map() });
     for (let t = from; t <= H; t++) {
       const d = infos[t];
-      let left = goodDays ? d.good : d.avail;
+      let left = goodDays ? d.good : maxEffort ? d.max : d.avail;
       const blocks: Alloc[] = [], perObj = new Map<string, number>();
       for (const o of order) {
         const rem = remaining(o.id);
@@ -271,7 +282,7 @@ export function forecast(s: State, now: number): Forecast {
         }
         owed.set(o.id, Math.max(0, Math.min(ow, rem)));
       }
-      out.push({ blocks, deadline: (goodDays ? d.good : d.avail) - left, perObj });
+      out.push({ blocks, deadline: (goodDays ? d.good : maxEffort ? d.max : d.avail) - left, perObj });
     }
     return { units, doneIdx, days: out };
   };
@@ -370,7 +381,7 @@ export function forecast(s: State, now: number): Forecast {
         for (const [id, n] of todayUnits) if (id !== m.id && !(skipped && waitsOn(id, m.id))) { u.set(id, Math.max(0, (u.get(id) || 0) - n)); if (!u.get(id)) dn.set(id, 0); }
         u.set(m.id, Math.max(0, units0.get(m.id)! - k)); if (!u.get(m.id)) dn.set(m.id, 0);
         const target = goodDays ? safeOf.get(o.id)! : diffDays(today, o.due!);
-        const d = landOf(simulate(new Map(), new Set(), goodDays, 1, u, dn), o);
+        const d = landOf(simulate(new Map(), new Set(), goodDays, 1, u, dn, !goodDays), o);
         return d === null ? target > H : d <= target; // past the planning horizon: not urgent yet
       };
       const fewest = (goodDays: boolean) => {
@@ -419,6 +430,8 @@ export function forecast(s: State, now: number): Forecast {
   }
   // with what FINAL STAND and DANGER added to today, re-check which deadlines still land late
   if (tierAdded) risky = late(sim);
+  // MISSION FAILURE means lost even at max effort (every free hour, an hour of Off Duty on a Plus Ultra day)
+  { const lost = late(simulate(boost, risky, false, 0, units0, done0, true)); risky = new Set([...risky].filter((id) => lost.has(id))); }
 
   // ---- 4. Compose each day: routines, deadline work, then flexible goals in the comfortable room left.
   const exUsed = new Map<string, number>();

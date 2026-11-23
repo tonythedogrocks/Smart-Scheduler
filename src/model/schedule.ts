@@ -216,3 +216,20 @@ export function learnedDishes(s: State): number {
   const last = xs.slice(-10).sort((a, b) => a - b);
   return last.length >= 3 ? Math.max(5, Math.round(last[Math.floor(last.length / 2)] / 5) * 5) : s.settings.dishesMin;
 }
+
+/** US holidays he'll likely have plans on (until he says what they are). */
+export function holidayName(date: string): string | null {
+  const [y, mo, d] = date.split('-').map(Number), wd = weekday(date);
+  const nth = (n: number) => Math.ceil(d / 7) === n, last = d + 7 > new Date(y, mo, 0).getDate();
+  const easter = (() => { const a = y % 19, b = Math.floor(y / 100), c = y % 100, dd = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - dd - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451); return [Math.floor((h + l - 7 * m + 114) / 31), ((h + l - 7 * m + 114) % 31) + 1]; })();
+  if (mo === 1 && d === 1) return "New Year's Day";
+  if (mo === 12 && d === 31) return "New Year's Eve";
+  if (mo === 12 && (d === 24 || d === 25)) return d === 24 ? 'Christmas Eve' : 'Christmas';
+  if (mo === 7 && d === 4) return 'Independence Day';
+  if (mo === 11 && wd === 4 && nth(4)) return 'Thanksgiving';
+  if (mo === 11 && wd === 5 && d >= 23 && d <= 29) return 'Day after Thanksgiving';
+  if (mo === 5 && wd === 1 && last) return 'Memorial Day';
+  if (mo === 9 && wd === 1 && nth(1)) return 'Labor Day';
+  if (mo === easter[0] && d === easter[1]) return 'Easter';
+  return null;
+}

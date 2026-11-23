@@ -645,7 +645,7 @@ describe('DANGER and FINAL STAND', () => {
   });
   it('a level-1 day asks only for FINAL STAND, never DANGER', () => {
     const s = sample();
-    s.objectives.find((o) => o.id === 'exam')!.due = '2026-11-14';
+    s.objectives.find((o) => o.id === 'exam')!.due = '2026-11-13';
     s.missions.find((m) => m.id === 'exam-steps')!.unitsLeft = 30;
     s.days['2026-11-12'] = { level: 1, morningEnd: at('2026-11-12T09:00') };
     const fc = forecast(s, at('2026-11-12T09:00'));
@@ -913,7 +913,7 @@ describe('red alert for tomorrow morning', () => {
     s.missions.find((m) => m.id === 'exam-tests')!.unitsLeft = 0;
     s.events.push({ id: 'ex', title: 'Exam', kind: 'exam', start: 645, end: 720, travel: 0, date: '2026-11-13' } as any);
     s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
-    const now = at('2026-11-12T21:05'); // too late tonight
+    const now = at('2026-11-12T22:15'); // too late tonight, even for a Plus Ultra hour of Off Duty
     expect(forecast(s, now).risks.some((r) => r.objectiveId === 'exam')).toBe(false);
     expect(lateRisk(s, now).length).toBe(1);
   });
@@ -1099,5 +1099,21 @@ describe('fixing logged times', () => {
     actions.editLog('x1', 600, 640);
     const l = S().logs.find((x) => x.id === 'x1')!;
     expect(Math.round((l.end - l.start) / 60000)).toBe(40);
+  });
+});
+
+describe('a realistic week ahead', () => {
+  it('holidays without plans yet count as half busy; known days are not', async () => {
+    const { holidayName } = await import('../src/model/schedule');
+    expect(holidayName('2026-11-26')).toBe('Thanksgiving');
+    expect(holidayName('2026-12-25')).toBe('Christmas');
+    expect(holidayName('2027-03-28')).toBe('Easter');
+    expect(holidayName('2026-11-24')).toBe(null);
+  });
+  it('one-off plans that usually come up on a weekday are held back from future days', async () => {
+    const { expectedBusy } = await import('../src/model/learn');
+    const s = sample();
+    for (const d of ['2026-10-30', '2026-11-06']) { s.days[d] = { level: 3 }; s.events.push({ id: 'e' + d, title: 'Plans', kind: 'event', start: 1080, end: 1260, travel: 30, date: d } as any); }
+    expect(expectedBusy(s, '2026-11-12', 5)).toBe(240);
   });
 });

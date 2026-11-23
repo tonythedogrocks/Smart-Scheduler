@@ -1130,3 +1130,13 @@ describe('chore steps timed from the last one done', () => {
     expect(st[0].start).toBe(12 * 60 + 50 + 80);
   });
 });
+
+describe('ride after a meal, when there is no other time', () => {
+  it('a bike errand still happens if the only time left is within its wait after a meal', () => {
+    const s = sample();
+    s.missions.push({ id: 'run', objectiveId: '', title: 'Errand', kind: 'work', energy: 'none', minutes: 20, minLevel: 1, unitsLeft: 1, unitsTotal: 1, maxBlockUnits: 1, errand: true, travel: 20, bike: true, onDate: '2026-11-12', window: [780, 870] } as any);
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00'), ate: { lunch: { at: 750, end: 780 } } };
+    const now = at('2026-11-12T13:00');
+    expect(layoutDay(s, forecast(s, now), '2026-11-12', now).some((i) => i.missionId === 'run')).toBe(true);
+  });
+});

@@ -1140,3 +1140,14 @@ describe('ride after a meal, when there is no other time', () => {
     expect(layoutDay(s, forecast(s, now), '2026-11-12', now).some((i) => i.missionId === 'run')).toBe(true);
   });
 });
+
+describe('done-by times', () => {
+  it('a routine with a done-by time ends by then when it can', () => {
+    const s = sample();
+    const h = s.missions.find((m) => m.kind === 'habit' && m.minLevel <= 3 && !m.days && !m.everyDays)!; h.doneBy = 720;
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
+    const now = at('2026-11-12T09:00');
+    const it = layoutDay(s, forecast(s, now), '2026-11-12', now).find((i) => i.missionId === h.id);
+    if (it) expect(it.end).toBeLessThanOrEqual(720);
+  });
+});

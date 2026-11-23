@@ -812,7 +812,9 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
       // matters more, so for anything outdoors (rides included) daylight is tried first with and without that wait
       const fbs = [...(soft.length ? [[...forbid, ...soft], forbid] : [forbid]), ...(ride && forbid.length ? [[] as [number, number][]] : [])];
       const dayHi = (m.outdoor || ride) && sun ? Math.min(hi, Math.floor(sun[1])) : null;
-      for (const h of dayHi !== null && dayHi < hi ? [dayHi, hi] : [hi]) {
+      const pref = m.doneBy !== undefined && m.doneBy < hi ? m.doneBy : null;
+      const his = [...new Set([...(pref !== null ? [Math.min(pref, dayHi ?? hi)] : []), ...(dayHi !== null && dayHi < hi ? [dayHi] : []), ...(pref !== null ? [pref] : []), hi])];
+      for (const h of his) {
         for (const fb of fbs) { got = pick(a.min, l0, fb, h, light, !!m.outdoor || ride, urgent); if (got) break; }
         if (got) break;
       }

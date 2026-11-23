@@ -808,9 +808,12 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     // ideally after what it prefers to follow today; if that can't fit, anywhere it can
     const pref = items.filter((it) => it.missionId && m.preferAfter?.includes(it.missionId)).reduce((x, it) => Math.max(x, it.end), lo);
     for (const l0 of pref > lo ? [pref, lo] : [lo]) {
-      // a ride's wait after a meal gives way if there's no other time for it
-      for (const fb of [...(soft.length ? [[...forbid, ...soft], forbid] : [forbid]), ...(ride && forbid.length ? [[] as [number, number][]] : [])]) {
-        got = pick(a.min, l0, fb, hi, light, !!m.outdoor, urgent);
+      // a ride's wait after a meal gives way if there's no other time for it; being back before sunset
+      // matters more, so for anything outdoors (rides included) daylight is tried first with and without that wait
+      const fbs = [...(soft.length ? [[...forbid, ...soft], forbid] : [forbid]), ...(ride && forbid.length ? [[] as [number, number][]] : [])];
+      const dayHi = (m.outdoor || ride) && sun ? Math.min(hi, Math.floor(sun[1])) : null;
+      for (const h of dayHi !== null && dayHi < hi ? [dayHi, hi] : [hi]) {
+        for (const fb of fbs) { got = pick(a.min, l0, fb, h, light, !!m.outdoor || ride, urgent); if (got) break; }
         if (got) break;
       }
       if (got) break;

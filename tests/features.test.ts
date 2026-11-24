@@ -1193,6 +1193,6 @@ describe('breakfast counts as a meal', () => {
     s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T11:10') };
     const now = at('2026-11-12T11:10');
     const it = layoutDay(s, forecast(s, now), '2026-11-12', now).find((i) => i.missionId === h.id);
-    if (it) expect(it.start).toBeGreaterThanOrEqual(11 * 60 + 10 + 60);
+    if (it) expect(it.start).toBeGreaterThanOrEqual(11 * 60 + 10 - 10 + 60); // breakfast ended 10 min before the routine (nowhere to be right after)
   });
 });

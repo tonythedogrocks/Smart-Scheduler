@@ -6,7 +6,7 @@ import { afterStats, expectedBusy, weekdayFactor, learnedLevel, capacityAt, chor
 
 /** tier: 'final' = skip it and the deadline is lost; 'danger' = skip it and the days after get harder than he can sustain. */
 export type Tier = 'final' | 'danger';
-export interface Alloc { missionId: string; units: number; baseMin: number; min: number; habit?: boolean; clock?: boolean; deadline?: boolean; must?: boolean; tier?: Tier }
+export interface Alloc { missionId: string; units: number; baseMin: number; min: number; habit?: boolean; clock?: boolean; deadline?: boolean; must?: boolean; tier?: Tier; guaranteed?: boolean }
 export interface DayAlloc { date: string; level: number; rest: boolean; blocks: Alloc[]; capMin: number; deadlineMin: number; lock: boolean }
 /** Lock-in: deadlines need more than a comfortable day. Which one, roughly how much a day, until when. */
 export interface LockIn { objectiveId: string; title: string; perDay: number; until: string; today: number; comfort: number; late: string[] }
@@ -133,6 +133,7 @@ export function forecast(s: State, now: number): Forecast {
   interface DayInfo { date: string; rest: boolean; level: number; avail: number; comfort: number; weight: number; routines: Alloc[]; good: number; slots: [number, number][]; max: number }
   const last = new Map(live.filter((m) => m.kind === 'habit').map((m) => [m.id, lastDone(s, m.id)]));
   const infos: DayInfo[] = [];
+  const gPlanned = new Map<string, number>(), gExercise = new Map<string, number>();
   for (let t = 0; t <= H; t++) {
     const date = addDays(today, t);
     const rest = isRest(s, date);
@@ -157,6 +158,28 @@ export function forecast(s: State, now: number): Forecast {
       routines.push({ missionId: m.id, units: 1, baseMin: base, min, habit: true });
       freeMin -= min;
       if (t > 0 && m.everyDays) last.set(m.id, date);
+    }
+    // guaranteed weekly time for what matters most to him, reserved before school is paced (days at level 3+)
+    if (!rest && level >= 2.5) for (const m of live) {
+      const g = (m.guarantee || []).filter((x) => x.from <= date).sort((a, b) => b.from.localeCompare(a.from))[0];
+      if (!g || g.min <= 0 || level < m.minLevel || (m.kind === 'work' && (units0.get(m.id) || 0) <= 0)) continue;
+      const ws = weekStart(date), key = m.id + '|' + ws;
+      const done = s.logs.filter((l) => l.missionId === m.id && l.date >= ws && l.date < addDays(ws, 7) && l.end > 0 && (l.date < today || t === 0)).reduce((a, l) => a + (l.end - l.start) / 60000, 0);
+      const left = g.min - done - (gPlanned.get(key) || 0);
+      if (left < 10) continue;
+      let daysLeft = 0;
+      for (let j = 0; j < 7; j++) { const dj = addDays(date, j); if (weekStart(dj) !== ws) break; if (!isRest(s, dj) && (j === 0 ? level : predictLevel(s, dj, today)) >= 2.5) daysLeft++; }
+      const u1 = unit(m);
+      let min = Math.max(u1, Math.min(left, Math.ceil(left / Math.max(1, daysLeft))));
+      if (m.dailyCapMin) min = Math.min(min, m.dailyCapMin);
+      if (isExercise(m) && exerciseMinWeek(s, ws) + (gExercise.get(ws) || 0) + min > exCap) continue; // the safe weekly ramp still applies
+      const units = m.kind === 'work' ? Math.max(1, Math.round(min / u1)) : 1;
+      min = m.kind === 'work' ? Math.round(units * u1) : min;
+      routines.push({ missionId: m.id, units, baseMin: m.kind === 'work' ? units * m.minutes : min, min, guaranteed: true });
+      freeMin -= min;
+      gPlanned.set(key, (gPlanned.get(key) || 0) + min);
+      if (isExercise(m)) gExercise.set(ws, (gExercise.get(ws) || 0) + min);
+      if (m.kind === 'work') units0.set(m.id, Math.max(0, (units0.get(m.id) || 0) - units));
     }
     // things pinned to this date are reserved first, whatever the level
     for (const m of live) {
@@ -183,7 +206,8 @@ export function forecast(s: State, now: number): Forecast {
     // day looks (its room, its timeline) uses the optimistic preview level.
     const paceComfort = t === 0 || real ? comfort : Math.min(avail, capacityAt(s, paceLevel, today) * weekdayFactor(s, today, weekday(date)));
     // a day expected to be a 1 (e.g. the Sabbath) isn't counted on for paced work
-    const weight = rest || avail <= 0 || paceComfort <= 0 ? 0 : Math.max(paceComfort, avail * 0.25) * span;
+    // school (deadline work) is paced steadily: a good day doesn't take a bigger share, so its extra room goes to his goals
+    const weight = rest || avail <= 0 || paceComfort <= 0 ? 0 : 240 * span;
     // what a day at its predicted level holds (today: what's left of today at the level he reported)
     const good = rest ? 0 : t === 0 ? comfort : paceComfort;
     // max effort (FINAL STAND and MISSION FAILURE): a Plus Ultra day can also take an hour of Off Duty
@@ -742,7 +766,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   const tierRank = (x: Alloc) => (x.tier === 'final' ? 2 : x.tier === 'danger' ? 1 : 0);
   const dueOf = (x: Alloc) => (x.deadline ? s.objectives.find((o) => o.id === byId.get(x.missionId)?.objectiveId)?.due || '9999' : '9999');
   // pinned errands, then FINAL STAND and DANGER work, then routines into what's left, then the rest
-  const order = blocks.sort((a, b) => Number(!!b.must && !b.habit) - Number(!!a.must && !a.habit) || tierRank(b) - tierRank(a) || Number(!!b.habit) - Number(!!a.habit) || Number(!!b.must) - Number(!!a.must) || dueOf(a).localeCompare(dueOf(b)) || hardness(b) - hardness(a));
+  const order = blocks.sort((a, b) => Number(!!b.must && !b.habit) - Number(!!a.must && !a.habit) || tierRank(b) - tierRank(a) || Number(!!b.habit) - Number(!!a.habit) || Number(!!b.guaranteed) - Number(!!a.guaranteed) || Number(!!b.must) - Number(!!a.must) || dueOf(a).localeCompare(dueOf(b)) || hardness(b) - hardness(a));
   const sun = s.settings.sun ? sunTimes(date, s.settings.sun.lat, s.settings.sun.lon) : null;
   /** Every start (5-min steps) that fits, scored by predicted energy; hard work takes the best, light work the dips. */
   const pick = (len: number, lo: number, fb: [number, number][], hi: number, light: boolean, outdoor = false, asap = false): { i: number; a: number } | null => {

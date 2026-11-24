@@ -367,6 +367,7 @@ describe('planner rework', () => {
   });
   it('lock-in names the deadlines driving it, with how much has to happen today', () => {
     const s = sample(); s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
+    s.missions.find((m) => m.id === 'exam-steps')!.unitsLeft = 40; s.objectives.find((o) => o.id === 'exam')!.due = '2026-11-14';
     const fc = forecast(s, at('2026-11-12T09:00'));
     expect(fc.lock).toBeTruthy();
     expect(fc.lock!.final + fc.lock!.danger).toBeGreaterThan(0);
@@ -1151,5 +1152,20 @@ describe('done-by times', () => {
     const it = layoutDay(s, forecast(s, now), '2026-11-12', now).find((i) => i.missionId === h.id);
     expect(it).toBeTruthy();
     expect(it!.end).toBeLessThanOrEqual(720);
+  });
+});
+
+describe('guaranteed time for what matters most', () => {
+  it('a guaranteed goal gets its weekly time even when school is heavy, and school stays steady on a good day', () => {
+    const s = sample();
+    const g = s.missions.find((m) => m.kind === 'practice' && !m.workout)!;
+    g.guarantee = [{ from: '2026-11-01', min: 120 }]; g.minLevel = 3;
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
+    const now = at('2026-11-12T09:00');
+    const fc = forecast(s, now);
+    const week = fc.days.filter((d) => d.date <= '2026-11-14').flatMap((d) => d.blocks).filter((b) => b.missionId === g.id && b.guaranteed);
+    expect(week.reduce((a, b) => a + b.min, 0)).toBeGreaterThanOrEqual(60);
+    const dl = (lv: number) => { const x = sample(); x.days['2026-11-12'] = { level: lv as any, morningEnd: at('2026-11-12T09:00') }; return forecast(x, now).days[0].blocks.filter((b) => b.deadline).reduce((a, b) => a + b.min, 0); };
+    expect(Math.abs(dl(5) - dl(3))).toBeLessThanOrEqual(60);
   });
 });

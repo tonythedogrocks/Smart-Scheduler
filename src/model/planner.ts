@@ -203,8 +203,10 @@ export function forecast(s: State, now: number): Forecast {
     // things pinned to this date are reserved first, whatever the level
     for (const m of live) {
       if (m.onDate !== date || m.kind !== 'work' || (units0.get(m.id) || 0) <= 0) continue;
-      const min = Math.round(unit(m)) + 2 * (m.travel || 0);
-      routines.push({ missionId: m.id, units: 1, baseMin: m.minutes, min, must: true });
+      // all of what's left of it, since it has to happen on this date
+      const u = units0.get(m.id) || 1;
+      const min = Math.round(u * unit(m)) + 2 * (m.travel || 0);
+      routines.push({ missionId: m.id, units: u, baseMin: u * m.minutes, min, must: true });
       freeMin -= min;
     }
     let comfort = capacityAt(s, level, today, t === 0) * (t === 0 ? 1 : weekdayFactor(s, today, weekday(date)));

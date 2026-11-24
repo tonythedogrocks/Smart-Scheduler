@@ -612,7 +612,10 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     const at = (start: number): State => ({ ...s, events: s.events.map((e) => (e.id === flex.id ? { ...e, start, end: Math.max(start + 1, start + len), leaveWindow: undefined } : e)) });
     const fits = (items: PlanItem[]) => {
       const must = (fc.days.find((d) => d.date === date)?.blocks || []).filter((b) => b.habit && !byIdOf(s, b.missionId)?.notFloor || b.tier);
-      return must.every((b) => items.some((i) => i.missionId === b.missionId && (i.done || i.kind === 'mission')));
+      // and a meal that would otherwise be at home still gets eaten at home (not pushed out by leaving early)
+      const fl = items.find((i) => i.block?.evtId === flex.id && i.block.kind === 'event');
+      const mealOut = items.some((i) => i.block?.kind === 'note' && i.block.meal && fl && i.start < fl.start && !flex.meals?.includes(i.block.meal));
+      return !mealOut && must.every((b) => items.some((i) => i.missionId === b.missionId && (i.done || i.kind === 'mission')));
     };
     const others = eventsOn(s, date).filter((e) => e.id !== flex.id);
     const clash = (t: number) => others.some((e) => t - flex.travel < e.end + (e.travelBack ?? e.travel) && e.start - e.travel < t + len);

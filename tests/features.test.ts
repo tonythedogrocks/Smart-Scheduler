@@ -1169,3 +1169,19 @@ describe('guaranteed time for what matters most', () => {
     expect(Math.abs(dl(5) - dl(3))).toBeLessThanOrEqual(60);
   });
 });
+
+describe('guaranteed time on a short day', () => {
+  it('the lower priority gives way first', () => {
+    const s = sample();
+    const ps = s.missions.filter((m) => m.kind === 'practice' && !m.workout).slice(0, 2);
+    if (ps.length < 2) return;
+    const [hi, lo] = ps;
+    hi.guarantee = [{ from: '2026-11-01', min: 600 }]; hi.priority = 3; hi.minLevel = 3; hi.dailyCapMin = 600;
+    lo.guarantee = [{ from: '2026-11-01', min: 600 }]; lo.priority = 1; lo.minLevel = 3; lo.dailyCapMin = 600;
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T09:00') };
+    const now = at('2026-11-12T19:30'); // little time left
+    const b = forecast(s, now).days[0].blocks;
+    const got = (id: string) => b.filter((x) => x.missionId === id).reduce((a, x) => a + x.min, 0);
+    expect(got(hi.id)).toBeGreaterThanOrEqual(got(lo.id));
+  });
+});

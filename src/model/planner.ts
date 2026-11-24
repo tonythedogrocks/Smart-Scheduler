@@ -160,7 +160,7 @@ export function forecast(s: State, now: number): Forecast {
       if (t > 0 && m.everyDays) last.set(m.id, date);
     }
     // guaranteed weekly time for what matters most to him, reserved before school is paced (days at level 3+)
-    if (!rest && level >= 2.5) for (const m of live) {
+    if (!rest && level >= 2.5) for (const m of [...live].sort((a, b) => (b.priority || 0) - (a.priority || 0))) {
       const g0 = (m.guarantee || []).filter((x) => x.from <= date).sort((a, b) => b.from.localeCompare(a.from))[0];
       // a total-hours goal sets the weekly amount itself (what's left / weeks left), capped by any guarantee in force
       let g = g0;
@@ -184,10 +184,17 @@ export function forecast(s: State, now: number): Forecast {
       const u1 = unit(m);
       let min = Math.max(u1, Math.min(left, Math.ceil(left / Math.max(1, daysLeft))));
       if (m.dailyCapMin) min = Math.min(min, m.dailyCapMin);
+      const lvCap = m.capByLevel?.[Math.min(5, Math.max(1, Math.round(level)))]; if (lvCap !== undefined) min = Math.min(min, lvCap);
+      min = Math.min(min, Math.floor(freeMin)); // a short day: what's left (higher priorities took theirs first)
+      if (min < 10) continue;
       if (isExercise(m) && exerciseMinWeek(s, ws) + (gExercise.get(ws) || 0) + min > exCap) continue; // the safe weekly ramp still applies
       const units = m.kind === 'work' ? Math.max(1, Math.round(min / u1)) : 1;
       min = m.kind === 'work' ? Math.round(units * u1) : min;
-      routines.push({ missionId: m.id, units, baseMin: m.kind === 'work' ? units * m.minutes : min, min, guaranteed: true });
+      // split into sessions on longer days (spread practice beats one long block)
+      if (m.kind !== 'work' && m.sessionMax && min > m.sessionMax) {
+        const n = Math.ceil(min / m.sessionMax), each = Math.round(min / n);
+        for (let k = 0; k < n; k++) routines.push({ missionId: m.id, units: 1, baseMin: each, min: each, guaranteed: true });
+      } else routines.push({ missionId: m.id, units, baseMin: m.kind === 'work' ? units * m.minutes : min, min, guaranteed: true });
       freeMin -= min;
       gPlanned.set(key, (gPlanned.get(key) || 0) + min);
       if (isExercise(m)) gExercise.set(ws, (gExercise.get(ws) || 0) + min);
@@ -778,7 +785,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   const tierRank = (x: Alloc) => (x.tier === 'final' ? 2 : x.tier === 'danger' ? 1 : 0);
   const dueOf = (x: Alloc) => (x.deadline ? s.objectives.find((o) => o.id === byId.get(x.missionId)?.objectiveId)?.due || '9999' : '9999');
   // pinned errands, then FINAL STAND and DANGER work, then routines into what's left, then the rest
-  const order = blocks.sort((a, b) => Number(!!b.must && !b.habit) - Number(!!a.must && !a.habit) || tierRank(b) - tierRank(a) || Number(!!b.habit) - Number(!!a.habit) || Number(!!b.guaranteed) - Number(!!a.guaranteed) || Number(!!b.must) - Number(!!a.must) || dueOf(a).localeCompare(dueOf(b)) || hardness(b) - hardness(a));
+  const order = blocks.sort((a, b) => Number(!!b.must && !b.habit) - Number(!!a.must && !a.habit) || tierRank(b) - tierRank(a) || Number(!!b.habit) - Number(!!a.habit) || Number(!!b.guaranteed) - Number(!!a.guaranteed) || (b.guaranteed ? (byId.get(b.missionId)?.priority || 0) - (byId.get(a.missionId)?.priority || 0) : 0) || Number(!!b.must) - Number(!!a.must) || dueOf(a).localeCompare(dueOf(b)) || hardness(b) - hardness(a));
   const sun = s.settings.sun ? sunTimes(date, s.settings.sun.lat, s.settings.sun.lon) : null;
   /** Every start (5-min steps) that fits, scored by predicted energy; hard work takes the best, light work the dips. */
   const pick = (len: number, lo: number, fb: [number, number][], hi: number, light: boolean, outdoor = false, asap = false): { i: number; a: number } | null => {

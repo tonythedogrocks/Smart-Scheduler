@@ -50,6 +50,9 @@ export interface Mission {
   steps?: { at: number; min: number; title: string }[]; // chore: hands-on moments, minutes from the start; must be home for each
   guarantee?: { from: string; min: number }[]; // minutes a week reserved for this, from each date on (latest applies); with pace, a cap
   /** a total-hours goal: the weekly guarantee is what's left / weeks left (counting time logged on `count` since `since`), less what routines already cover */
+  priority?: number;       // guaranteed time: higher keeps its place when a day runs short (lower gives way first)
+  capByLevel?: Record<number, number>; // most minutes a day by level (e.g. a practice ceiling)
+  sessionMax?: number;     // split a day's time into sessions of at most this long
   exShare?: number;        // exercise: this share of the week's safe exercise ceiling is guaranteed (grows as the ceiling does)
   pace?: { totalMin: number; since: string; by: string; count: string[]; routineMin?: number }; // minutes a week reserved for this, from each date on (latest applies)
   doneBy?: number;         // ideally finished by this time of day (minutes); later only if there's no other time

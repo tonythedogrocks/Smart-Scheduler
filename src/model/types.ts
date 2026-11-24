@@ -48,7 +48,9 @@ export interface Mission {
   notFloor?: boolean;      // habit that isn't part of the day's floor
   form?: 'measure';
   steps?: { at: number; min: number; title: string }[]; // chore: hands-on moments, minutes from the start; must be home for each
-  guarantee?: { from: string; min: number }[]; // minutes a week reserved for this, from each date on (latest applies)
+  guarantee?: { from: string; min: number }[]; // minutes a week reserved for this, from each date on (latest applies); with pace, a cap
+  /** a total-hours goal: the weekly guarantee is what's left / weeks left (counting time logged on `count` since `since`), less what routines already cover */
+  pace?: { totalMin: number; since: string; by: string; count: string[]; routineMin?: number }; // minutes a week reserved for this, from each date on (latest applies)
   doneBy?: number;         // ideally finished by this time of day (minutes); later only if there's no other time
   preferAfter?: string[];  // ideally after these on the same day (if it can't be, it still happens)
   dueBy?: string;          // chore: wanted by this date, sooner than its usual gap

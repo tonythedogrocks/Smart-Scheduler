@@ -161,7 +161,17 @@ export function forecast(s: State, now: number): Forecast {
     }
     // guaranteed weekly time for what matters most to him, reserved before school is paced (days at level 3+)
     if (!rest && level >= 2.5) for (const m of live) {
-      const g = (m.guarantee || []).filter((x) => x.from <= date).sort((a, b) => b.from.localeCompare(a.from))[0];
+      const g0 = (m.guarantee || []).filter((x) => x.from <= date).sort((a, b) => b.from.localeCompare(a.from))[0];
+      // a total-hours goal sets the weekly amount itself (what's left / weeks left), capped by any guarantee in force
+      let g = g0;
+      if (m.pace) {
+        const ws0 = weekStart(date), logged = s.logs.filter((l) => m.pace!.count.includes(l.missionId) && l.date >= m.pace!.since && l.date < ws0 && l.end > 0).reduce((a, l) => a + (l.end - l.start) / 60000, 0);
+        const weeks = Math.max(1, diffDays(ws0, m.pace.by) / 7);
+        const dyn = Math.max(0, Math.round((m.pace.totalMin - logged) / weeks - (m.pace.routineMin || 0)));
+        g = { from: date, min: g0 ? Math.min(g0.min, dyn) : dyn };
+      }
+      // waits on another task that isn't finished (e.g. study time that takes over after a course)
+      if ((m.after || []).some((a) => (units0.get(a) || 0) > 0)) continue;
       if (!g || g.min <= 0 || level < m.minLevel || (m.kind === 'work' && (units0.get(m.id) || 0) <= 0)) continue;
       const ws = weekStart(date), key = m.id + '|' + ws;
       const done = s.logs.filter((l) => l.missionId === m.id && l.date >= ws && l.date < addDays(ws, 7) && l.end > 0 && (l.date < today || t === 0)).reduce((a, l) => a + (l.end - l.start) / 60000, 0);

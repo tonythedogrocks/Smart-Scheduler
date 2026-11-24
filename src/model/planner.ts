@@ -170,6 +170,8 @@ export function forecast(s: State, now: number): Forecast {
         const dyn = Math.max(0, Math.round((m.pace.totalMin - logged) / weeks - (m.pace.routineMin || 0)));
         g = { from: date, min: g0 ? Math.min(g0.min, dyn) : dyn };
       }
+      // exercise: a share of this week's safe ceiling, so it grows as he keeps it up (toward 2-4x the HHS minimum)
+      if (m.exShare) { const share = Math.round(exCap * m.exShare); g = { from: date, min: g ? Math.min(g.min, share) : share }; }
       // waits on another task that isn't finished (e.g. study time that takes over after a course)
       if ((m.after || []).some((a) => (units0.get(a) || 0) > 0)) continue;
       if (!g || g.min <= 0 || level < m.minLevel || (m.kind === 'work' && (units0.get(m.id) || 0) <= 0)) continue;

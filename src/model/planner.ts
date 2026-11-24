@@ -830,6 +830,8 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     const waits = m.workout || ride || m.mealGap !== undefined;
     const bigGap = m.workout ? Math.max(gapM, s.settings.bigMealGap) : gapM * 2;
     const forbid: [number, number][] = waits ? fixed.filter((b) => b.kind === 'meal').map((b) => [b.start, b.end + (b.big ? bigGap : gapM)] as [number, number]) : [];
+    // breakfast ends the morning routine: the same wait applies after it
+    if (waits) { const mb = fixed.find((b) => b.key === 'f:morning'); if (mb) forbid.push([mb.start, mb.end + gapM]); }
     // daylight-only (sunrise to sunset) and errand windows, travel included
     let lo = 0, hi = 1e9;
     if (m.daylight && s.settings.sun) { const [rise, set] = sunTimes(date, s.settings.sun.lat, s.settings.sun.lon); lo = Math.ceil(rise / 5) * 5; hi = Math.floor(set); }

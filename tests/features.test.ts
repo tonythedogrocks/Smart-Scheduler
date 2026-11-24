@@ -1185,3 +1185,14 @@ describe('guaranteed time on a short day', () => {
     expect(got(hi.id)).toBeGreaterThanOrEqual(got(lo.id));
   });
 });
+
+describe('breakfast counts as a meal', () => {
+  it('strength waits after the morning routine (breakfast) like after any meal', () => {
+    const s = sample();
+    const h = s.missions.find((m) => m.kind === 'habit' && m.minLevel <= 3 && !m.days && !m.everyDays)!; h.mealGap = 60;
+    s.days['2026-11-12'] = { level: 3, morningEnd: at('2026-11-12T11:10') };
+    const now = at('2026-11-12T11:10');
+    const it = layoutDay(s, forecast(s, now), '2026-11-12', now).find((i) => i.missionId === h.id);
+    if (it) expect(it.start).toBeGreaterThanOrEqual(11 * 60 + 10 + 60);
+  });
+});

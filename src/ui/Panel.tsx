@@ -63,7 +63,6 @@ export function Panel({ p, day }: { p: PanelVM; day: DayVM }) {
             )}
             {run && <span class="soft" style="font-size:14px;text-align:center">Another mission is in progress. Finish or stop it first.</span>}
             {p.date === lib.today && !p.done && <Earlier p={p} />}
-            {p.date === lib.today && !p.done && !run && <button type="button" class="plain" onClick={() => { actions.skip(p.missionId!, p.start); go({ open: '' }); }}>Skip it today</button>}
           </>
         )}
         {mine && run && (

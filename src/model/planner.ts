@@ -405,7 +405,6 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   }
 
   const sab = isSabbath(s, date);
-  const skipped = new Set(isToday ? (s.days[date]?.misses || []).filter((x) => (x as any).skip).map((x) => x.m) : []);
   const doneToday = (id: string) => s.logs.filter((l) => l.missionId === id && l.date === date && l.done);
   const unit = (m: Mission) => m.minutes * factor(s, m.id);
   const exCap = exerciseCeiling(s, today).cap;
@@ -419,7 +418,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
 
   // ---- What the day needs, with its row.
   const needs: Need[] = [];
-  const add = (m: Mission, row: number, units: number, min: number) => { if (min >= 5 && units > 0 && !skipped.has(m.id) && !(m.skipOn || []).includes(date)) needs.push({ missionId: m.id, units, min: Math.round(min), baseMin: m.kind === 'work' ? units * m.minutes : m.minutes, row }); };
+  const add = (m: Mission, row: number, units: number, min: number) => { if (min >= 5 && units > 0 && !(m.skipOn || []).includes(date)) needs.push({ missionId: m.id, units, min: Math.round(min), baseMin: m.kind === 'work' ? units * m.minutes : m.minutes, row }); };
   const last = new Map<string, string | null>();
   if (!isToday) for (const m of s.missions) if (m.kind === 'habit' && m.everyDays) { let ld = lastDone(s, m.id); for (let d = today; d < date; d = addDays(d, 1)) if (habitsDue(s, d, new Map([[m.id, ld]])).some((x) => x.id === m.id)) ld = d; last.set(m.id, ld); }
   for (const m of habitsDue(s, date, isToday ? undefined : last)) {
@@ -553,7 +552,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     for (let guard = 0; guard < 40; guard++) {
       let placed = false;
       for (const m of order) {
-        if (unplaced.has(m.id) || skipped.has(m.id) || (m.skipOn || []).includes(date)) continue;
+        if (unplaced.has(m.id) || (m.skipOn || []).includes(date)) continue;
         const have = items.filter((i) => i.missionId === m.id && !i.done).reduce((a, i) => a + (i.end - i.start), 0) + s.logs.filter((l) => l.missionId === m.id && l.date === date && l.end > 0).reduce((a, l) => a + logMin(l), 0);
         const room = capOf(m) - have;
         const u1 = unit(m);

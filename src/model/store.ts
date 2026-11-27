@@ -229,10 +229,6 @@ export const actions = {
       s.logs.push({ id: uid(), missionId: 'measure', date, start: t - 600000, end: t, plannedMin: 10, units: 1, done: true });
     });
   },
-  /** Not doing this today: it leaves today's plan (and teaches the app that time didn't suit it). */
-  skip(missionId: string, at: number) {
-    mutate((s) => { const d = (s.days[today()] ||= {}); d.misses = [...(d.misses || []), { m: missionId, at, skip: true }].slice(-40); });
-  },
   importState(json: string) { const got = JSON.parse(json); if (got?.v !== 1 || !Array.isArray(got.missions)) throw new Error('Not a Limit Break backup'); state = withDefaults(got); state.updatedAt = Date.now(); persist(); emit(); },
   reset() { state = seed(); state.updatedAt = Date.now(); persist(); emit(); },
 };

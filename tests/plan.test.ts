@@ -118,3 +118,11 @@ describe('deadlines', () => {
     for (let t = 0; t < 14; t++) expect(fc.days[t].needs.some((x) => x.missionId === 'cert-exam')).toBe(false);
   });
 });
+
+describe('a missed task', () => {
+  it('stays in today\'s plan later on; something less important gives way', () => {
+    const s = fresh(), now = at('2026-11-09T13:00:00');
+    s.days[MON] = { morningEnd: at('2026-11-09T08:50:00'), misses: [{ m: 'exam-steps', at: 600 }] };
+    expect(tasks(plan(s, MON, now)).some((i) => i.missionId === 'exam-steps' && i.start >= 780)).toBe(true);
+  });
+});

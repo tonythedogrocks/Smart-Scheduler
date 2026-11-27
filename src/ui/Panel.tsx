@@ -1,12 +1,10 @@
 import { useState } from 'preact/hooks';
-import { S, actions, go, setLocal } from '../model/store';
-import type { PanelVM, Library } from '../model/vm';
+import { S, actions, go } from '../model/store';
+import { nextAfter, type DayVM, type PanelVM } from '../model/vm';
 import { fmtDur, fmtT, nowTs } from '../model/time';
 import { bodyFat } from '../model/learn';
-import { describeUnits, nextLabels, orders } from '../model/planner';
-import { isBackupDay } from '../model/schedule';
-import { addDays, weekStart } from '../model/time';
-import { Arrow, fromHM, toHM, useTick } from './bits';
+import { describeUnits, nextLabels } from '../model/planner';
+import { fromHM, toHM, useTick } from './bits';
 import { Choice } from './Choice';
 
 function Measure() {
@@ -28,23 +26,23 @@ function Measure() {
   );
 }
 
-export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string }) {
+export function Panel({ p, day }: { p: PanelVM; day: DayVM }) {
   useTick(15000);
   const s = S();
   const [flash, setFlash] = useState(false);
   const run = s.running;
   const mine = !!run && run.missionId === p.missionId && run.step === p.step && !p.done;
   const mission = p.missionId ? s.missions.find((m) => m.id === p.missionId) : undefined;
-  const sab = lib.rest;
   const success = p.act === 'mission' && (p.done || flash) && !mine;
-  const od = orders(lib.todayItems);
-  const nextUp = od.now && od.now.key !== p.key ? od.now : od.next && od.next.key !== p.key ? od.next : null;
-  const day = p.date ? s.days[p.date] || {} : {};
-  const mealAt = p.meal ? (p.meal === 'lunch' ? day.lunchAt ?? s.settings.lunchAt : day.dinnerAt ?? s.settings.dinnerAt) : 0;
+  const nextUp = day.isToday ? nextAfter(day.items, p.key) : null;
+  const lib = { today: day.today };
+  const dayRec = s.days[p.date] || {};
+  const mealAt = p.meal ? (p.meal === 'lunch' ? dayRec.lunchAt ?? s.settings.lunchAt : dayRec.dinnerAt ?? s.settings.dinnerAt) : 0;
   const nudge = (d: number) => p.date && p.meal && actions.setDay(p.date, p.meal === 'lunch' ? { lunchAt: mealAt + d } : { dinnerAt: mealAt + d });
   return (
-    <div class="full" style={`animation:${anim} 420ms cubic-bezier(.2,.9,.25,1) both`}>
+    <div class="full" style="animation:lbPop 420ms cubic-bezier(.2,.9,.25,1) both">
       <span class="cap">{p.h}</span>
+      {p.must && !p.done && <span class="must final" style="align-self:flex-start">FINAL STAND</span>}
       <h1>{p.t.toUpperCase()}</h1>
       {p.m && <span style="font-size:17px">{p.m}</span>}
       {p.d && <p class="bubble">{p.d}</p>}
@@ -63,13 +61,14 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
               <span>START!</span>
             </button>
             )}
-            {run && <span class="soft" style="font-size:14px;text-align:center">Another {sab ? 'task' : 'mission'} is in progress. Finish or stop it first.</span>}
+            {run && <span class="soft" style="font-size:14px;text-align:center">Another mission is in progress. Finish or stop it first.</span>}
             {p.date === lib.today && !p.done && <Earlier p={p} />}
+            {p.date === lib.today && !p.done && !run && <button type="button" class="plain" onClick={() => { actions.skip(p.missionId!, p.start); go({ open: '' }); }}>Skip it today</button>}
           </>
         )}
         {mine && run && (
           <>
-            <span class="caption" style="align-self:flex-start;font-size:17px;transform:rotate(-1.5deg)">{sab ? 'IN PROGRESS' : 'MISSION IN PROGRESS'}... {fmtDur(Math.max(0, (nowTs() - run.startedAt) / 60000))}</span>
+            <span class="caption" style="align-self:flex-start;font-size:17px;transform:rotate(-1.5deg)">MISSION IN PROGRESS... {fmtDur(Math.max(0, (nowTs() - run.startedAt) / 60000))}</span>
             {mission?.kind === 'work' && mission.labels?.length ? <Steps labels={nextLabels(mission, run.units)} ticked={run.ticked || 0} /> : null}
             <button type="button" class="big fin" onClick={() => { actions.finish(true); setFlash(true); }}>
               <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
@@ -80,7 +79,7 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
         )}
         {success && (
           <>
-            <div class="burst"><div>{sab ? <>DONE.</> : <>MISSION<br />SUCCESS!</>}</div></div>
+            <div class="burst"><div>MISSION<br />SUCCESS!</div></div>
             {(() => {
               // the real times can be fixed after the fact
               const l = p.logId ? s.logs.find((x) => x.id === p.logId) : [...s.logs].reverse().find((x) => x.missionId === p.missionId && x.done && (p.step === undefined || x.step === p.step));
@@ -97,14 +96,14 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
               );
             })()}
             {nextUp && p.date === lib.today && (
-              <button type="button" class="small" style="align-self:center" onClick={() => { setFlash(false); go({ view: 'panel', c: 'week', i: lib.today, ch: Math.max(0, lib.cols[0].issues.find((i) => i.key === lib.today)!.chapters.findIndex((c) => c.panels.some((x) => x.key === nextUp.key))), p: nextUp.key }); }}>
+              <button type="button" class="small" style="align-self:center" onClick={() => { setFlash(false); go({ open: nextUp.key }); }}>
                 Next: {nextUp.title} · {fmtT(nextUp.start)}
               </button>
             )}
           </>
         )}
         {p.act === 'meal' && p.meal && p.date === lib.today && (() => {
-          const got = day.ate?.[p.meal!];
+          const got = dayRec.ate?.[p.meal!];
           return got ? (
             <>
               <div class="row">
@@ -133,25 +132,20 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
             </>
           );
         })()}
-        {p.act === 'backup' && p.date && (
-          <button type="button" class="small on" style="align-self:flex-start" onClick={() => actions.toggleBackup(weekStart(p.date!))}>
-            {isBackupDay(s, p.date) ? `Back to a normal ${s.settings.restDayName}` : `Use this ${s.settings.restDayName} as a backup work day`}
-          </button>
-        )}
-        {p.act === 'meal' && p.meal === 'dinner' && p.date && p.date >= lib.today && !day.cook && (
+        {p.act === 'meal' && p.meal === 'dinner' && p.date && p.date >= lib.today && !dayRec.cook && (
           <div class="row">
             <button type="button" class="small on" onClick={() => actions.setDay(p.date!, { cook: true })}>I'm cooking for myself</button>
             <button type="button" class="small on" onClick={() => actions.setDay(p.date!, { cook: 'family' })}>I'm cooking for the family</button>
           </div>
         )}
         {p.act === 'morning' && p.date === lib.today && (
-          day.morningEnd ? (
+          dayRec.morningEnd ? (
             <>
               <span class="caption" style="align-self:flex-start;font-size:17px">READY FOR THE DAY!</span>
               <div class="row">
                 <span style="font-size:15px">Finished at</span>
-                <input type="time" aria-label="Time you finished your morning routine" value={toHM(new Date(day.morningEnd).getHours() * 60 + new Date(day.morningEnd).getMinutes())} style="height:44px;padding:0 8px;border:3px solid var(--ink);border-radius:6px;font-weight:700"
-                  onChange={(e) => { const v = (e.target as HTMLInputElement).value; if (!v) return; const d0 = new Date(day.morningEnd!); d0.setHours(0, 0, 0, 0); actions.setDay(p.date!, { morningEnd: d0.getTime() + fromHM(v) * 60000 }); }} />
+                <input type="time" aria-label="Time you finished your morning routine" value={toHM(new Date(dayRec.morningEnd).getHours() * 60 + new Date(dayRec.morningEnd).getMinutes())} style="height:44px;padding:0 8px;border:3px solid var(--ink);border-radius:6px;font-weight:700"
+                  onChange={(e) => { const v = (e.target as HTMLInputElement).value; if (!v) return; const d0 = new Date(dayRec.morningEnd!); d0.setHours(0, 0, 0, 0); actions.setDay(p.date!, { morningEnd: d0.getTime() + fromHM(v) * 60000 }); }} />
               </div>
             </>
           )
@@ -161,8 +155,8 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
             </button>
         )}
         {p.act === 'dishes' && p.date === lib.today && (() => {
-          const meal = p.key === 'f:dishes1' ? 'lunch' : 'dinner', r = day.dishes?.[meal];
-          const put = (v: { start: number; end?: number }) => actions.setDay(p.date!, { dishes: { ...(day.dishes || {}), [meal]: v } });
+          const meal = p.key === 'f:dishes1' ? 'lunch' : 'dinner', r = dayRec.dishes?.[meal];
+          const put = (v: { start: number; end?: number }) => actions.setDay(p.date!, { dishes: { ...(dayRec.dishes || {}), [meal]: v } });
           return r?.end !== undefined ? <span class="caption" style="align-self:flex-start;font-size:17px">DISHES DONE. {fmtDur((r.end - r.start) / 60000)}</span>
             : r ? (
               <>
@@ -172,10 +166,10 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
             ) : <button type="button" class="big go" onClick={() => put({ start: nowTs() })}>START!</button>;
         })()}
         {p.act === 'cook' && p.date && (
-          day.cookEnd ? <span class="caption" style="align-self:flex-start;font-size:17px">COOKED. DINNER'S ON.</span>
-          : day.cookStart ? (
+          dayRec.cookEnd ? <span class="caption" style="align-self:flex-start;font-size:17px">COOKED. DINNER'S ON.</span>
+          : dayRec.cookStart ? (
             <>
-              <span class="caption" style="align-self:flex-start;font-size:17px;transform:rotate(-1.5deg)">COOKING... {fmtDur(Math.max(0, (nowTs() - day.cookStart) / 60000))}</span>
+              <span class="caption" style="align-self:flex-start;font-size:17px;transform:rotate(-1.5deg)">COOKING... {fmtDur(Math.max(0, (nowTs() - dayRec.cookStart) / 60000))}</span>
               <button type="button" class="big fin" onClick={() => { const t = nowTs(); actions.setDay(p.date!, { cookEnd: t, dinnerAt: Math.round(new Date(t).getHours() * 60 + new Date(t).getMinutes()) }); }}>DONE!</button>
             </>
           ) : (
@@ -185,27 +179,21 @@ export function Panel({ p, lib, anim }: { p: PanelVM; lib: Library; anim: string
             </>
           )
         )}
-        {p.act === 'meal' && p.date && p.date >= lib.today && !(p.meal && day.ate?.[p.meal]) && (
+        {p.act === 'meal' && p.date && p.date >= lib.today && !(p.meal && dayRec.ate?.[p.meal]) && (
           <div class="row">
             <span style="font-size:15px">Move it:</span>
             {[-30, -15, 15, 30].map((d) => <button type="button" class="small" onClick={() => nudge(d)}>{d > 0 ? '+' : '−'}{Math.abs(d)} min</button>)}
           </div>
         )}
         {p.act === 'choice' && p.date && p.evtId && <Choice evtId={p.evtId} date={p.date} />}
-        {p.act === 'event' && p.evtId && p.date === lib.today && s.events.find((e) => e.id === p.evtId)?.untilBack && !day.backAt && (
+        {p.act === 'event' && p.evtId && p.date === lib.today && s.events.find((e) => e.id === p.evtId)?.untilBack && !dayRec.backAt && (
           <button type="button" class="big fin" onClick={() => actions.setDay(p.date!, { backAt: nowTs() })}>I'M BACK</button>
         )}
         {p.act === 'event' && p.evtId && p.date && p.date >= lib.today && (
-          <button type="button" class="small" onClick={() => { actions.removeEvent(p.evtId!, p.date); go({ view: 'page', dir: 'out' }); }}>
+          <button type="button" class="small" onClick={() => { actions.removeEvent(p.evtId!, p.date); go({ open: '' }); }}>
             {s.events.find((e) => e.id === p.evtId)?.date ? 'Remove this event' : 'Skip it this week'}
           </button>
         )}
-        {p.act === 'objective' && p.objectiveId && (
-          <button type="button" class="small" onClick={() => actions.completeObjective(p.objectiveId!, !p.done)}>{p.done ? 'Reopen this Objective' : 'Mark this Objective complete'}</button>
-        )}
-        {p.editable && p.missionId && !mine && <button type="button" class="plain" onClick={() => setLocal({ sheet: 'mission', sheetArg: p.missionId })}>Edit this mission</button>}
-        {p.key === 'debrief' && <button type="button" class="small" onClick={() => go({ view: 'debrief' })}>Open Debrief</button>}
-        {p.key === 'shifts' && <button type="button" class="small" onClick={() => setLocal({ sheet: 'add' })}>Enter shifts</button>}
       </div>
     </div>
   );

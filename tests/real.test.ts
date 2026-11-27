@@ -20,7 +20,7 @@ export function problems(s: State, now: number): string[] {
   for (const o of s.objectives) {
     if (!o.due || o.done) continue;
     const l = fc.landing[o.id];
-    if (l && l > o.due && !fc.risks.some((r) => r.objectiveId === o.id)) out.push(`${o.title}: lands ${l}, after its due date ${o.due}, with no warning shown`);
+    if (l && l > o.due && !fc.warns.some((r) => r.objectiveId === o.id)) out.push(`${o.title}: lands ${l}, after its due date ${o.due}, with no warning shown`);
     else if (l && l > o.due) out.push(`${o.title}: lands ${l}, after its due date ${o.due}`);
   }
   const byId = new Map(s.missions.map((m) => [m.id, m]));
@@ -35,7 +35,8 @@ export function problems(s: State, now: number): string[] {
     busy.sort((a, b) => a.start - b.start);
     for (let k = 1; k < busy.length; k++) for (let j = 0; j < k; j++) {
       const a = busy[j], b = busy[k];
-      if (b.start < a.end && !(a.block?.evtId && a.block.evtId === b.block?.evtId)) out.push(`${date}: "${a.title}" ${hm(a.start)}–${hm(a.end)} overlaps "${b.title}" ${hm(b.start)}–${hm(b.end)}`);
+      const choreInOff = (x: PlanItem, y: PlanItem) => x.block?.kind === 'offduty' && y.key.startsWith('c:'); // a chore step may run into Off Duty
+      if (b.start < a.end && !(a.block?.evtId && a.block.evtId === b.block?.evtId) && !choreInOff(a, b) && !choreInOff(b, a)) out.push(`${date}: "${a.title}" ${hm(a.start)}–${hm(a.end)} overlaps "${b.title}" ${hm(b.start)}–${hm(b.end)}`);
     }
     // sleep is the length set in Settings
     const sleep = items.find((i) => i.title === 'Asleep');

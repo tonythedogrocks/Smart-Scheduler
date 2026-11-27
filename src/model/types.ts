@@ -106,7 +106,7 @@ export interface DayRec {
   feel?: 'much' | 'right' | 'more'; // his end-of-day answer: too much / about right / room for more
   dishes?: Partial<Record<'lunch' | 'dinner', { start: number; end?: number }>>; // dishes he timed (timestamps)
   ate?: Partial<Record<'lunch' | 'dinner', { at: number; big?: boolean; end?: number }>>; // end: when he tapped done eating
-  misses?: { m: string; at: number }[];
+  misses?: { m: string; at: number; skip?: boolean }[]; // planned blocks that passed unstarted, or that he skipped
   plan?: { sig: string; items: PlanSnap[]; know?: number }; // today's plan once the day has started: kept until something real changes or a block is missed // planned blocks that passed without being started (start time, minutes) // confirmed meals: start (minutes from midnight), and whether it was a large one
 }
 
@@ -138,7 +138,7 @@ export interface Settings {
 
 /** A day from the earlier app: time blocks with an energy signal (1 = finished on pace, 0.2 = missed). */
 /** A planned mission block, as laid out when today's plan was fixed. */
-export interface PlanSnap { key: string; missionId: string; start: number; end: number; title: string; sub?: string; detail?: string; units?: number; baseMin?: number; min?: number; step?: number; tier?: 'final' | 'danger' }
+export interface PlanSnap { key: string; missionId: string; start: number; end: number; title: string; sub?: string; detail?: string; units?: number; baseMin?: number; min?: number; step?: number }
 
 export interface PriorDay { id: string; t?: number; date: string; level?: number; blocks: { s: number; e: number; v: number }[] }
 

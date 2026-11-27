@@ -360,6 +360,13 @@ export function forecast(s: State, now: number): Forecast {
   let sim = simulate(boost, new Set());
   let risky = late(sim);
   const landIdx = (x: Sim, id: string) => { const o = s.objectives.find((y) => y.id === id)!; const d = landOf(x, o); return d === null ? 1e9 : d; };
+  /** Objectives whose tasks this objective's tasks wait on, down the chain (e.g. a send that waits on another course's exams). */
+  const upstreamOf = (oid: string): string[] => {
+    const seen = new Set<string>(), objs = new Set<string>();
+    const walk = (m: Mission) => { for (const a of [...(m.after || []), ...(m.afterNoWait || [])]) { if (seen.has(a)) continue; seen.add(a); const pre = byId.get(a); if (!pre) continue; if (pre.objectiveId !== oid) objs.add(pre.objectiveId); walk(pre); } };
+    for (const m of live) if (m.objectiveId === oid) walk(m);
+    return [...objs];
+  };
   const frozen = new Set<string>();
   for (let pass = 0; pass < 8 && [...risky].some((id) => !frozen.has(id)); pass++) {
     const tryBoost = new Map(boost);
@@ -368,7 +375,7 @@ export function forecast(s: State, now: number): Forecast {
       if (frozen.has(id)) continue;
       const o = s.objectives.find((x) => x.id === id)!;
       // a dependent objective is lifted through what it waits on
-      for (const x of [id, ...(o.dependsOn || [])]) if ((tryBoost.get(x) || 1) < 8) { tryBoost.set(x, (tryBoost.get(x) || 1) * 1.6); lifted.push(id); }
+      for (const x of [id, ...(o.dependsOn || []), ...upstreamOf(id)]) if ((tryBoost.get(x) || 1) < 8) { tryBoost.set(x, (tryBoost.get(x) || 1) * 1.6); lifted.push(id); }
     }
     if (!lifted.length) break;
     const next = simulate(tryBoost, risky);
@@ -380,7 +387,7 @@ export function forecast(s: State, now: number): Forecast {
     if (!helped) break;
     // keep the extra push only for objectives it actually helped
     for (const [x, v] of tryBoost) {
-      const owner = [...new Set(lifted)].find((id) => id === x || (s.objectives.find((o) => o.id === id)?.dependsOn || []).includes(x));
+      const owner = [...new Set(lifted)].find((id) => id === x || (s.objectives.find((o) => o.id === id)?.dependsOn || []).includes(x) || upstreamOf(id).includes(x));
       if (!owner || !frozen.has(owner)) boost.set(x, v);
     }
     sim = simulate(boost, risky);
@@ -626,7 +633,10 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   const isToday = date === today;
   const nowMin = isToday ? minsOf(now) : date < today ? 1e9 : -1;
   // Today the morning routine isn't over until he taps Done: it runs on to now, and nothing starts before it ends.
-  const morningOpen = isToday && !s.days[date]?.morningEnd;
+  // Once something away from home has started (a ride to a shift, say), the morning was over without the tap.
+  const mb0 = fixed.find((b) => b.key === 'f:morning');
+  const leftHome = !!mb0 && fixed.some((b) => b.key !== 'f:morning' && b.blocking && (b.kind === 'travel' || b.kind === 'event') && b.start >= mb0.end && b.start <= nowMin);
+  const morningOpen = isToday && !s.days[date]?.morningEnd && !leftHome;
   if (morningOpen) { const mb = fixed.find((b) => b.key === 'f:morning'); if (mb && mb.end < round5(nowMin)) mb.end = round5(nowMin); }
   // a meal he started and hasn't tapped done on runs on to now (up to twice its length, in case he forgot)
   // dishes he started and hasn't tapped done on run on to now (up to an hour)

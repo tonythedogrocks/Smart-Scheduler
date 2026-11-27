@@ -16,6 +16,7 @@ Read `CONTEXT.md` in the private data repo (the one the app syncs to) at the sta
 ## Working on the code
 
 - `npm test`, `npx tsc`, `npm run build` must all pass before pushing to `main`; pushing deploys to GitHub Pages.
+- Before pushing, also run the real-data check: `LB_DATA=<private repo>/state.json npx vitest run tests/real.test.ts`. It must pass, or the owner must have been told what fails.
 - Keep it $0: no paid APIs.
 - Sync merges record by record; any new data collection must be added to `COLS` in `src/model/merge.ts` and defaulted in `withDefaults` in `src/model/seed.ts`, and code must tolerate data written by older app versions.
 - Ask the owner before changing any wording in the app.

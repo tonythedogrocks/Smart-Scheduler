@@ -1,6 +1,6 @@
 import type { State, Level, Mission } from './types';
 import { addDays, dateOf, diffDays, minsOf, parseD, weekStart, weekday } from './time';
-import { eventsOn, isRest, isSabbath } from './schedule';
+import { eventsOn, holidayName, isRest, isSabbath } from './schedule';
 import { realMisses } from './energy';
 
 /** A record long enough to learn from (Start and Done tapped back to back teaches nothing). */
@@ -353,6 +353,7 @@ export function expectedBusy(s: State, today: string, wd: number): number {
   for (let i = 1; i <= 56; i++) {
     const d = addDays(today, -i);
     if (weekday(d) !== wd || !s.days[d]?.level) continue; // only days he actually used the app
+    if (holidayName(d) || holidayName(addDays(d, 1))) continue; // a holiday (or its eve) says nothing about a normal week
     xs.push(s.events.filter((e) => e.date === d && e.kind !== 'exam').reduce((a, e) => a + (e.end - e.start) + e.travel + (e.travelBack ?? e.travel), 0));
   }
   return xs.length >= 2 ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;

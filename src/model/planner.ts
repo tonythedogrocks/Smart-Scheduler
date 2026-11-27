@@ -103,23 +103,34 @@ function weeklyTarget(s: State, m: Mission, date: string, exCap: number): number
 }
 const logMin = (l: { start: number; end: number }) => (l.end > 0 ? Math.max(1, (l.end - l.start) / 60000) : 0);
 
-/** How much non-routine work he really gets done in a day: recent days he used the app, newest counting most. */
-export function usualOutput(s: State, today: string): number {
-  const habit = new Set(s.missions.filter((m) => m.kind === 'habit').map((m) => m.id));
-  const xs: number[] = [];
+/** What counts as getting work done: not routines, chores or errands. */
+const workIds = (s: State) => new Set(s.missions.filter((m) => m.kind !== 'habit' && m.kind !== 'chore' && !m.errand).map((m) => m.id));
+/** Usable free minutes in a day (gaps of 15 min or more, with breaks between blocks). */
+const freeMinOn = (s: State, date: string, from = 0) => freeSlots(fixedBlocks(s, date), from).reduce((a, [x, y]) => a + (y - x >= 15 ? (y - x) * 60 / (60 + (s.settings.breakMin ?? 10)) : 0), 0);
+/** Share of a day's free time used for routines (the floor and what's due). */
+const floorMinOn = (s: State, date: string) => habitsDue(s, date).filter((m) => isFloor(m) || m.notFloor).reduce((a, m) => a + m.minutes * factor(s, m.id), 0);
+const PRIOR_SHARE = 0.5;
+
+/**
+ * How much of his free time he really spends on work: recent days he used this version of the app (days from the
+ * old, level-capped app don't count), newest counting most. Starts from a modest guess until there are 5 days.
+ */
+export function usualShare(s: State, today: string): number {
+  const ids = workIds(s), xs: number[] = [];
   for (let i = 1; i <= 28 && xs.length < 14; i++) {
     const d = addDays(today, -i);
-    if (isSabbath(s, d)) continue;
+    if (isSabbath(s, d) || s.days[d]?.level) continue; // old-app days were capped by level
     const ls = s.logs.filter((l) => l.date === d);
     if (!ls.length && !s.days[d]?.misses?.length) continue; // a day he didn't use the app says nothing
-    xs.push(ls.filter((l) => !habit.has(l.missionId)).reduce((a, l) => a + logMin(l), 0));
+    const free = freeMinOn(s, d) - floorMinOn(s, d);
+    if (free < 60) continue;
+    xs.push(clamp(ls.filter((l) => ids.has(l.missionId)).reduce((a, l) => a + logMin(l), 0) / free, 0, 1));
   }
-  const prior = s.settings.capacity?.[3] ?? 210;
-  if (!xs.length) return prior;
+  if (!xs.length) return PRIOR_SHARE;
   let w = 0, t = 0;
   xs.forEach((x, i) => { const k = Math.pow(0.9, i); w += k; t += k * x; });
   const mean = t / w;
-  return xs.length >= 5 ? mean : (mean * xs.length + prior * (5 - xs.length)) / 5;
+  return xs.length >= 5 ? mean : (mean * xs.length + PRIOR_SHARE * (5 - xs.length)) / 5;
 }
 
 let memo: { k: string; v: Forecast } | null = null;
@@ -151,7 +162,7 @@ export function forecast(s: State, now: number): Forecast {
   const isDeadlineWork = (m: Mission) => m.kind === 'work' && !m.errand && !isBig(m) && deadlineObjs.some((o) => o.id === m.objectiveId);
 
   // ---- Each day: free minutes (whole plan), and what he usually gets done (realistic).
-  const usual = usualOutput(s, today);
+  const share = usualShare(s, today);
   const brk = s.settings.breakMin ?? 10;
   const exCap = exerciseCeiling(s, today).cap;
   const last = new Map(live.filter((m) => m.kind === 'habit').map((m) => [m.id, lastDone(s, m.id)]));
@@ -178,7 +189,7 @@ export function forecast(s: State, now: number): Forecast {
       if (holidayName(date) && !eventsOn(s, date).some((e) => e.date)) hold = Math.max(hold, free / 2);
     }
     const workFree = Math.max(0, free - floor);
-    const real = sab ? 0 : Math.max(0, Math.min(t === 0 ? usual - workMin(s, today) : usual, workFree - hold));
+    const real = sab ? 0 : share * Math.max(0, workFree - hold); // today: what's left of today's free time
     days.push({ date, sab, free: sab ? 0 : workFree, real, floor, big: Math.min(big, workFree) });
   }
   const realW = days.map((d) => d.real);
@@ -226,7 +237,7 @@ export function forecast(s: State, now: number): Forecast {
         }
         owed.set(o.id + row, Math.max(0, ow));
       };
-      const share = (o: Objective, extra: number) => {
+      const paceShare = (o: Objective, extra: number) => {
         const safe = safeOf(o, extra), rem = remaining(o.id);
         if (rem <= 0) return 0;
         if (t >= safe) return rem;
@@ -245,7 +256,7 @@ export function forecast(s: State, now: number): Forecast {
             let fut = 0; for (let j = t + 1; j <= safe; j++) fut += realW[j];
             const catchUp = mode === 'plan' ? Math.max(0, rem - Math.max(0, fut - ahead)) : 0;
             ahead += rem;
-            return [Math.max(share(o, 0), catchUp), share(o, BUFFER)];
+            return [Math.max(paceShare(o, 0), catchUp), paceShare(o, BUFFER)];
           });
           order.forEach((o, i) => give(o, sh[i][0], 3));
           if (mode === 'real') left -= Math.min(left, d.big); // the big goals take their share before getting ahead
@@ -304,11 +315,6 @@ export function forecast(s: State, now: number): Forecast {
   memo = { k, v };
   return v;
 }
-
-const workMin = (s: State, date: string) => {
-  const habit = new Set(s.missions.filter((m) => m.kind === 'habit').map((m) => m.id));
-  return s.logs.filter((l) => l.date === date && !habit.has(l.missionId)).reduce((a, l) => a + logMin(l), 0);
-};
 
 // ---- When things get done: success by time of day x energy type, learned from what he marks.
 const BUCKETS = [720, 1020, 1260, 1e9]; // morning, afternoon, evening, night

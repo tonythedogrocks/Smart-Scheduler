@@ -2,21 +2,20 @@ import { describe, it, expect } from 'vitest';
 import { seed } from '../src/model/seed';
 import { sample } from './fixture';
 import { merge, stamp } from '../src/model/merge';
-import { xpOf } from '../src/model/game';
 import type { State } from '../src/model/types';
 
 const edit = (s: State, t: number, fn: (x: State) => void): State => { const n = structuredClone(s); fn(n); n.updatedAt = t; stamp(s, n, t); return n; };
 const log = (id: string, xp: number) => ({ id, missionId: 'cards', date: '2026-11-12', start: 1000, end: 61000, plannedMin: 20, units: 1, done: true, xp });
 
 describe('sync merge', () => {
-  it('keeps work logged on both devices, and XP adds up', () => {
+  it('keeps work logged on both devices', () => {
     const base = seed();
     const mac = edit(base, 10, (s) => { s.logs.push(log('a', 20)); });
     const phone = edit(base, 11, (s) => { s.logs.push(log('b', 15)); s.flares.push({ id: 'f', ts: 5 }); });
     const m1 = merge(mac, phone), m2 = merge(phone, mac);
     expect(m1.logs.map((l) => l.id).sort()).toEqual(['a', 'b']);
-    expect(xpOf(m1)).toBe(35);
-    expect(xpOf(m2)).toBe(35);
+    expect(m1.logs.length).toBe(2);
+    expect(m2.logs.length).toBe(2);
     expect(m1.flares.length).toBe(1);
   });
   it('newest edit to the same record wins, either way round', () => {

@@ -1,18 +1,18 @@
 import { get, set } from 'idb-keyval';
-import type { State, Level, Evt, Mission, Objective, Log, PlanSnap } from './types';
+import type { State, Evt, Log, Mission, PlanSnap } from './types';
 import { seed, withDefaults } from './seed';
 import { dateOf, nowTs, uid } from './time';
-import { describeUnits, excusedHabits, habitsDue, nextGap, nextLabels, planSig, GRACE } from './planner';
+import { describeUnits, nextGap, nextLabels, planSig, GRACE } from './planner';
 import { factor } from './learn';
-import { unlock } from './game';
 import { know, stamp } from './merge';
 
-export interface Nav { view: 'shelf' | 'col' | 'toc' | 'page' | 'panel' | 'debrief' | 'settings' | 'achievements'; c: string; i: string; ch: number; p: string; dir: 'in' | 'out' }
-export interface Local { nav: Nav; status: boolean; sheet: null | 'flare' | 'doing' | 'add' | 'mission'; sheetArg?: string; toast?: { text: string; id: number }; lastFlare?: string }
+/** What's on screen: the day being viewed (empty = today), the open item, or Settings. */
+export interface Nav { date: string; open: string; settings: boolean }
+export interface Local { nav: Nav; toast?: { text: string; id: number } }
 
 const KEY = 'limit-break-v1', NAVKEY = 'limit-break-nav';
 let state: State = seed();
-let local: Local = { nav: { view: 'shelf', c: 'week', i: '', ch: 0, p: '', dir: 'in' }, status: false, sheet: null };
+let local: Local = { nav: { date: '', open: '', settings: false } };
 const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
 export const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f); }; };
@@ -45,37 +45,19 @@ export function setLocal(patch: Partial<Local>) {
   try { localStorage.setItem(NAVKEY, JSON.stringify(local.nav)); } catch {}
   emit();
 }
-export const go = (patch: Partial<Nav>) => setLocal({ nav: { ...local.nav, dir: 'in', ...patch } });
+export const go = (patch: Partial<Nav>) => setLocal({ nav: { ...local.nav, ...patch } });
 export const toast = (text: string) => setLocal({ toast: { text, id: Date.now() } });
 
 export async function load() {
   try { const got = await get(KEY); if (got && got.v === 1) state = withDefaults(got); } catch {}
-  try { const n = localStorage.getItem(NAVKEY); if (n) local.nav = { ...local.nav, ...JSON.parse(n) }; } catch {}
+  try { const n = JSON.parse(localStorage.getItem(NAVKEY) || '{}'); if (typeof n.settings === 'boolean') local.nav = { ...local.nav, settings: n.settings }; } catch {}
   try { (navigator as any).storage?.persist?.(); } catch {}
   emit();
 }
 
 const today = () => dateOf(nowTs());
 
-function afterChange(s: State, date: string) {
-  const d = (s.days[date] ||= {});
-  if (d.level && !d.floorAwarded) {
-    const due = habitsDue(s, date, d.level).filter((m) => !m.notFloor);
-    // a routine the app's own rules kept out today (e.g. a meal gap) doesn't count against the floor
-    const excused = date === today() ? excusedHabits(s, nowTs()) : new Set<string>();
-    const ok = due.every((m) => excused.has(m.id) || s.logs.some((l) => l.missionId === m.id && l.date === date && l.done));
-    if (ok && (due.length > 0 || d.level === 1)) d.floorAwarded = true;
-  }
-  return unlock(s, date);
-}
-
 export const actions = {
-  /** End-of-day answer: too much / about right / room for more (feeds what each level holds). */
-  setFeel(date: string, feel: 'much' | 'right' | 'more') { mutate((s) => { (s.days[date] ||= {}).feel = feel; }); },
-  setLevel(level: Level) {
-    mutate((s) => { const d = (s.days[today()] ||= {}); d.level = level; /* first report of the day = start of the day */ if (!d.setAt || dateOf(d.setAt) !== today()) d.setAt = nowTs(); });
-    setLocal({ status: false });
-  },
   start(missionId: string, units: number, plannedMin: number, step?: number, key?: string) {
     mutate((s) => {
       if (s.running) return;
@@ -89,7 +71,6 @@ export const actions = {
   /** Tick off steps of the running block in order (count = how many units are done so far). */
   tick(count: number) { mutate((s) => { if (s.running) s.running.ticked = Math.max(0, Math.min(s.running.units, count)); }); },
   finish(done: boolean) {
-    let got: string[] = [], floor = false;
     mutate((s) => {
       const r = s.running; if (!r) return;
       const date = today(), end = nowTs();
@@ -107,7 +88,7 @@ export const actions = {
         const partial = m0?.kind === 'work' && !m0.labels?.length ? Math.max(0, elapsed - credited * unit) : 0;
         const restMin = m0?.kind === 'work' ? Math.max(restUnits > 0 ? 5 : 0, Math.round(restUnits * unit - partial)) : Math.max(0, Math.round(r.plannedMin * f0) - elapsed);
         if (elapsed >= 5 || credited > 0) {
-          s.logs.push({ id: uid(), missionId: r.missionId, date, start: r.startedAt, end, plannedMin: r.plannedMin, units: credited, done: false, level: s.days[date]?.level, xp: Math.round(Math.min((end - r.startedAt) / 60000, Math.max(r.plannedMin * 2, 10))), ...(r.step !== undefined ? { step: r.step } : {}) });
+          s.logs.push({ id: uid(), missionId: r.missionId, date, start: r.startedAt, end, plannedMin: r.plannedMin, units: credited, done: false, ...(r.step !== undefined ? { step: r.step } : {}) });
           if (credited > 0 && m0?.kind === 'work') { m0.unitsLeft = Math.max(0, (m0.unitsLeft || 0) - credited); if (m0.unitsLeft === 0) m0.doneAt = date; }
         }
         s.running = undefined;
@@ -132,45 +113,34 @@ export const actions = {
           }
           pl.items.sort((a, b) => a.start - b.start);
         }
-        afterChange(s, date);
         return;
       }
       // stopping partway still counts the steps ticked off; the rest goes back to the pool
       const doneUnits = done ? r.units : Math.min(r.units, r.ticked || 0);
-      const log: Log = { id: uid(), missionId: r.missionId, date, start: r.startedAt, end, plannedMin: r.plannedMin, units: doneUnits, done, level: s.days[date]?.level, xp: Math.round(Math.min((end - r.startedAt) / 60000, Math.max(r.plannedMin * 2, 10))), ...(r.step !== undefined ? { step: r.step } : {}) };
+      const log: Log = { id: uid(), missionId: r.missionId, date, start: r.startedAt, end, plannedMin: r.plannedMin, units: doneUnits, done, ...(r.step !== undefined ? { step: r.step } : {}) };
       s.logs.push(log);
       s.running = undefined;
       // ran past the start of what was next: re-plan the rest (not a miss, he was working)
       const pl = s.days[date]?.plan, nm = new Date(end).getHours() * 60 + new Date(end).getMinutes();
       if (pl && pl.items.some((x) => x.start + GRACE <= nm)) delete s.days[date].plan;
-      // on a Plus Ultra day (5), finishing early re-plans so the freed time gets filled
-      else if (pl && done && s.days[date]?.level === 5 && pl.items.some((x) => x.start > nm + GRACE)) delete s.days[date].plan;
       const m = s.missions.find((x) => x.id === r.missionId);
       if (doneUnits > 0 && m?.kind === 'work') {
         m.unitsLeft = Math.max(0, (m.unitsLeft || 0) - doneUnits);
         if (m.unitsLeft === 0) m.doneAt = date;
       }
-
-      const before = !!s.days[date]?.floorAwarded;
-      got = afterChange(s, date);
-      floor = !before && !!s.days[date]?.floorAwarded;
     });
-    if (got.length) toast('Achievement unlocked!'); else if (floor) toast("Today's floor is hit. Full mission success!");
   },
   /** Done earlier and logging it now: records it with the real times he enters (minutes from midnight, today). */
   doneEarlier(missionId: string, units: number, plannedMin: number, fromMin: number, toMin: number, step?: number, key?: string) {
-    let got: string[] = [];
     mutate((s) => {
       const date = today(), base = new Date(nowTs()); base.setHours(0, 0, 0, 0);
       const start = base.getTime() + fromMin * 60000, end = base.getTime() + Math.max(fromMin + 1, toMin) * 60000;
-      s.logs.push({ id: uid(), missionId, date, start, end, plannedMin, units, done: true, level: s.days[date]?.level, xp: Math.round(Math.min((end - start) / 60000, Math.max(plannedMin * 2, 10))), ...(step !== undefined ? { step } : {}) });
+      s.logs.push({ id: uid(), missionId, date, start, end, plannedMin, units, done: true, ...(step !== undefined ? { step } : {}) });
       const pl = s.days[date]?.plan;
       if (pl) { const i = pl.items.findIndex((x) => (key ? x.key === key : x.missionId === missionId)); if (i >= 0) pl.items.splice(i, 1); }
       const m = s.missions.find((x) => x.id === missionId);
       if (m?.kind === 'work') { m.unitsLeft = Math.max(0, (m.unitsLeft || 0) - units); if (m.unitsLeft === 0) m.doneAt = date; }
-      got = afterChange(s, date);
     });
-    if (got.length) toast('Achievement unlocked!');
   },
   /** Fix the real start and end of something already logged (minutes from midnight on its day). */
   editLog(id: string, fromMin: number, toMin: number) {
@@ -181,14 +151,6 @@ export const actions = {
     });
   },
   cancelRun() { mutate((s) => { s.running = undefined; }); },
-  flare() {
-    const id = uid();
-    mutate((s) => { s.flares.push({ id, ts: nowTs() }); });
-    setLocal({ sheet: 'flare', lastFlare: id });
-  },
-  rateFlare(id: string, rating: number) { mutate((s) => { const f = s.flares.find((x) => x.id === id); if (f) f.rating = rating; }); },
-  undoFlare(id: string) { mutate((s) => { s.flares = s.flares.filter((x) => x.id !== id); }); },
-  doing(what: string) { mutate((s) => { s.doing.push({ id: uid(), ts: nowTs(), what }); }); toast(`Logged: ${what}`); },
   addEvent(e: Omit<Evt, 'id'>) { mutate((s) => { s.events.push({ ...e, id: uid() }); }); },
   updateEvent(id: string, patch: Partial<Evt>) { mutate((s) => { const e = s.events.find((x) => x.id === id); if (e) { if (patch.start !== undefined) patch.end = patch.start + (e.end - e.start); Object.assign(e, patch); } }); },
   removeEvent(id: string, date?: string) {
@@ -218,14 +180,6 @@ export const actions = {
       const next = { ...cur }; if (at === null) delete next.end; else next.end = Math.max(cur.at + 1, mins);
       d.ate = { ...(d.ate || {}), [meal]: next };
     });
-  },
-  /** Re-check today's floor (a routine can become excused later, e.g. after a meal); only writes if it's newly met. */
-  checkFloor() {
-    const d = S().days[today()];
-    if (!d?.level || d.floorAwarded) return;
-    const probe = structuredClone(S());
-    afterChange(probe, today());
-    if (probe.days[today()]?.floorAwarded) { let got: string[] = []; mutate((s) => { got = afterChange(s, today()); }); toast(got.length ? 'Achievement unlocked!' : "Today's floor is hit. Full mission success!"); }
   },
   /** Fix today's plan once the day has started (or after a change rebuilt it). */
   savePlan(sig: string, items: PlanSnap[]) {
@@ -265,30 +219,20 @@ export const actions = {
     mutate((s) => { const d = (s.days[today()] ||= {}); d.dinnerAt = mins; d.dinnerTap = mins; d.ate = { ...(d.ate || {}), dinner: { at: mins } }; if (d.cook && !d.cookEnd) { d.cookEnd = t; d.cookStart ??= t - 1; } });
     toast('Dinner time. Enjoy it.');
   },
-  /** Make a week's rest day a backup work day, or turn that back off. */
-  toggleBackup(weekStartDate: string) {
-    mutate((s) => { const w = new Set(s.settings.backupWeeks || []); if (w.has(weekStartDate)) w.delete(weekStartDate); else w.add(weekStartDate); s.settings.backupWeeks = [...w].sort().slice(-8); });
-  },
   setDay(date: string, patch: Partial<State['days'][string]>) { mutate((s) => { s.days[date] = { ...(s.days[date] || {}), ...patch }; }); },
   setSettings(patch: Partial<State['settings']>) { mutate((s) => { s.settings = { ...s.settings, ...patch }; }); },
-  addObjective(o: Omit<Objective, 'id'>) { const id = uid(); mutate((s) => { s.objectives.push({ ...o, id }); }); return id; },
-  completeObjective(id: string, done: boolean) {
-    let got: string[] = [];
-    mutate((s) => { const o = s.objectives.find((x) => x.id === id); if (!o) return; o.done = done; o.doneAt = done ? today() : undefined; got = unlock(s, today()); });
-    if (got.length) toast('Achievement unlocked!');
-  },
   saveMission(m: Mission) { mutate((s) => { const i = s.missions.findIndex((x) => x.id === m.id); if (i >= 0) s.missions[i] = m; else s.missions.push(m); }); },
   addMeasure(weight: number, neck: number, navel: number) {
-    let got: string[] = [];
     mutate((s) => {
       const date = today(), t = nowTs();
       s.measures.push({ id: uid(), date, weight, neck, navel });
-      s.logs.push({ id: uid(), missionId: 'measure', date, start: t - 600000, end: t, plannedMin: 10, units: 1, done: true, level: s.days[date]?.level, xp: 10 });
-      got = afterChange(s, date);
+      s.logs.push({ id: uid(), missionId: 'measure', date, start: t - 600000, end: t, plannedMin: 10, units: 1, done: true });
     });
-    if (got.length) toast('Achievement unlocked!');
   },
-  claim(id: string) { mutate((s) => { if (!s.achievements[id]) { s.achievements[id] = today(); (s.claimed ||= {})[id] = today(); } }); toast('Achievement unlocked!'); },
+  /** Not doing this today: it leaves today's plan (and teaches the app that time didn't suit it). */
+  skip(missionId: string, at: number) {
+    mutate((s) => { const d = (s.days[today()] ||= {}); d.misses = [...(d.misses || []), { m: missionId, at, skip: true }].slice(-40); });
+  },
   importState(json: string) { const got = JSON.parse(json); if (got?.v !== 1 || !Array.isArray(got.missions)) throw new Error('Not a Limit Break backup'); state = withDefaults(got); state.updatedAt = Date.now(); persist(); emit(); },
   reset() { state = seed(); state.updatedAt = Date.now(); persist(); emit(); },
 };

@@ -1,106 +1,9 @@
-import { S, actions, setLocal, toast } from '../model/store';
-import { achievements, heroLevel, xpOf } from '../model/game';
-import { Choice } from './Choice';
-import { energyPeak } from '../model/energy';
-import type { Library } from '../model/vm';
-import { addDays, dateOf, fmtDate, fmtDay, fmtDur, fmtT, nowTs, weekStart } from '../model/time';
-import { afterStats, morningStats, pushSize, sustainableCapacity, weekdayFactor, choreDue, choreInterval, choreLast, crashAfter5, exerciseCeiling, factor, flareStats, followThrough, learnedCapacity } from '../model/learn';
-import { eventsOn } from '../model/schedule';
-import { levelName, nice } from '../model/seed';
-import { fromHM, toHM } from './bits';
-import type { Level } from '../model/types';
 import { useEffect, useState } from 'preact/hooks';
+import { S, actions, toast } from '../model/store';
+import { dateOf, fmtT, nowTs } from '../model/time';
+import { fromHM, toHM } from './bits';
 import { getCfg, onSyncStatus, setCfg, syncNow, syncStatus } from '../model/sync';
 import { sendFiles, type Sent } from '../model/inbox';
-
-export function Achievements() {
-  const s = S();
-  return (
-    <>
-      <div class="colhead" style="background:#FFD426"><h1>ACHIEVEMENTS</h1><span style="font-size:14px">Real milestones. Nothing earned is ever lost.</span></div>
-      <div class="ach">
-        {achievements(s).map((a) => {
-          const got = s.achievements[a.id];
-          return (
-            <button type="button" class={got ? 'got' : ''} disabled={!!got || !a.manual} onClick={() => { if (a.manual && confirm(`Mark "${a.sub}" as achieved?`)) actions.claim(a.id); }}>
-              <span class="t">{a.title}</span><span>{a.sub}</span>
-              <span style="margin-top:auto">{got ? fmtDate(got) : a.manual ? 'Tap when it happens' : 'Not yet'}</span>
-            </button>
-          );
-        })}
-      </div>
-    </>
-  );
-}
-
-export function Debrief({ lib }: { lib: Library }) {
-  const s = S(), today = dateOf(nowTs()), ws = weekStart(today);
-  const days = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
-  const logs = s.logs.filter((l) => l.date >= ws && l.date <= days[6]);
-  const bySkill = s.skills.map((k) => {
-    const ids = new Set(s.missions.filter((m) => s.objectives.find((o) => o.id === m.objectiveId)?.skillId === k.id).map((m) => m.id));
-    return { k, min: logs.filter((l) => ids.has(l.missionId)).reduce((a, l) => a + (l.end - l.start) / 60000, 0) };
-  });
-  const floors = days.filter((d) => s.days[d]?.floorAwarded).length;
-  const lc = learnedCapacity(s, today), crash = crashAfter5(s, today), ft = followThrough(s), fl = flareStats(s);
-  const learned: string[] = [];
-  for (const m of s.missions) { const f = factor(s, m.id); if (Math.abs(f - 1) >= 0.1) learned.push(`${m.title} really takes about ${Math.round(m.minutes * f)} min (estimate was ${m.minutes}). Plans now use that.`); }
-  for (const n of [1, 2, 3, 4, 5] as Level[]) if (lc[n] && lc[n]!.n >= 3) learned.push(`A ${nice(levelName(n))} day really gets about ${fmtDur(lc[n]!.mean)} of focused work done.`);
-  if (crash.confident) learned.push(`The day after Plus Ultra averages level ${crash.after.toFixed(1)}. Those days are now planned light.`);
-  if (ft.n >= 10) learned.push(`${Math.round(ft.rate * 100)}% of started work gets finished in one go.`);
-  const peak = energyPeak(s, today);
-  if (peak) learned.push(`Your energy usually peaks around ${fmtT(peak.from)} to ${fmtT(peak.to)}. The hardest work goes there; routines go in the dips.`);
-
-  const sus = sustainableCapacity(s, today), push = pushSize(s, today);
-  if (sus !== null) learned.push(`Sustainable capacity: about ${fmtDur(sus)} of focused work a day (your best recent day that wasn't followed by a crash). Active days plan to it; Plus Ultra plans ${Math.round(push.pct * 100)}% past it.`);
-  for (const p of push.pushes.slice(-3)) learned.push(`Push ${fmtDate(p.start)}${p.end !== p.start ? ` to ${fmtDate(p.end)}` : ''} (${p.days} days with the dial-back): ${p.net >= 0 ? 'came out ahead' : 'came out behind'} by ${fmtDur(Math.abs(p.net))} vs. staying at capacity, so the next push is ${p.net >= 0 ? 'a bit bigger' : 'a bit smaller'}.`);
-  const WDN = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
-  for (let w = 0; w < 7; w++) { const f = weekdayFactor(s, today, w); if (Math.abs(f - 1) >= 0.15) learned.push(`${WDN[w]} usually get ${f > 1 ? 'more' : 'less'} done (about ${Math.round(Math.abs(f - 1) * 100)}% ${f > 1 ? 'above' : 'below'} average). Future ${WDN[w]} are planned to match.`); }
-  const ms = morningStats(s);
-  if (ms) learned.push(`You're usually ready for the day by about ${fmtT(ms.readyAt)}${ms.span ? `, about ${ms.span} min after reporting in` : ''} (last ${ms.n} mornings).`);
-  const plannable = new Set(['shift', 'workout', 'event', 'physical', 'mental', 'social']);
-  for (const a of afterStats(s)) learned.push(`${a.energy[0].toUpperCase() + a.energy.slice(1)} work right after ${a.after === 'event' ? 'an event' : a.after === 'workout' ? 'a workout' : a.after === 'shift' ? 'a shift' : a.after === 'physical' || a.after === 'mental' || a.after === 'social' ? a.after + ' work' : a.after} gets finished ${Math.round(a.rate * 100)}% of the time, against ${Math.round(a.usual * 100)}% usually.${a.worse && plannable.has(a.after) ? ' Plans now leave a gap after it.' : ''}`);
-  const ex = exerciseCeiling(s, today);
-  if (ex.growing && Object.keys(s.days).length > 7) learned.push(`Exercise ceiling is up to ${ex.cap} min a week.`);
-  for (const b of fl.before) learned.push(`${b.t} came before ${b.c} of ${fl.n} ${s.settings.flareLabel.toLowerCase()}s.`);
-  if (lib.fc.eased) learned.push(`${s.settings.flareLabel}s are up, so workouts are eased for now. Daily basics stay.`);
-  const nws = addDays(ws, 7);
-  const next = Array.from({ length: 7 }, (_, i) => addDays(nws, i)).flatMap((d) => eventsOn(s, d).map((e) => ({ d, e })));
-  const hero = heroLevel(xpOf(s));
-  return (
-    <>
-      <div class="colhead" style="background:#1E5BD8;color:#fff"><h1>DEBRIEF</h1><span style="font-size:14px">Week of {fmtDate(ws)} · progress, what the app learned, next week</span></div>
-      <div class="card narrow">
-        <h2>THIS WEEK</h2>
-        <div class="days7">{days.map((d) => <span><span>{fmtDay(d).slice(0, 3)}</span><b>{s.days[d]?.level ?? '·'}</b></span>)}</div>
-        <p>{floors} {floors === 1 ? 'day' : 'days'} at the floor · Level {hero.level} · {xpOf(s)} XP · {Math.round(ex.done)} of {ex.cap} min of exercise</p>
-        <ul>{bySkill.filter((x) => x.min >= 1).map((x) => <li>{nice(x.k.title)}: {fmtDur(x.min)}</li>)}</ul>
-        {!logs.length && <p class="soft">Nothing logged yet this week.</p>}
-      </div>
-      <div class="card narrow">
-        <h2>PROGRESS</h2>
-        <ul>
-          {s.objectives.filter((o) => !o.done && lib.fc.landing[o.id] !== undefined).map((o) => {
-            const risk = lib.fc.risks.find((r) => r.objectiveId === o.id), land = lib.fc.landing[o.id];
-            return <li style={risk ? 'color:#B3231A' : ''}>{nice(o.title)}: {land ? `lands about ${fmtDate(land)}` : 'not landing yet'}{o.due ? ` · due ${fmtDate(o.due)}` : ''}{risk ? ' · at risk' : ''}</li>;
-          })}
-        </ul>
-      </div>
-      <div class="card narrow">
-        <h2>WHAT THE APP LEARNED</h2>
-        {learned.length ? <ul>{learned.map((t) => <li>{t}</li>)}</ul> : <p class="soft">Nothing yet. It only speaks up once it is confident in a pattern.</p>}
-      </div>
-      <div class="card narrow">
-        <h2>NEXT WEEK</h2>
-        {next.length ? <ul>{next.map(({ d, e }) => <li>{fmtDay(d)} · {e.title} {fmtT(e.start)} to {fmtT(e.end)}</li>)}</ul> : <p class="soft">Nothing on the schedule yet.</p>}
-        <div class="row">
-          <button type="button" class="small on" onClick={() => setLocal({ sheet: 'add', sheetArg: undefined })}>Enter shifts</button>
-        </div>
-        {next.filter(({ e }) => e.choices).map(({ d, e }) => <Choice evtId={e.id} date={d} label={`${e.title}, ${fmtDay(d)}:`} />)}
-      </div>
-    </>
-  );
-}
 
 export function Settings() {
   const st = S().settings;
@@ -135,23 +38,6 @@ export function Settings() {
             {e.choices!.map((c) => <button type="button" class={`small ${e.start === c ? 'on' : ''}`} onClick={() => actions.updateEvent(e.id, { start: c })}>{fmtT(c)} to {fmtT(c + e.end - e.start)}</button>)}
           </div>
         ))}
-      </div>
-      <Chores />
-      <Errands />
-      <div class="card narrow">
-        <h2>PLANNING</h2>
-        <p>Deadlines are planned against a modest day, so good days build a buffer and bad days spend it.</p>
-        <div class="row">
-          <span style="font-size:14px">Plan against level:</span>
-          {[2, 2.5, 3].map((b) => <button type="button" class={`small ${st.baseline === b ? 'on' : ''}`} onClick={() => actions.setSettings({ baseline: b })}>{b}</button>)}
-        </div>
-        <p class="soft" style="font-size:14px">Starting guess for focused work per level, until the app has learned the real numbers:</p>
-        <div class="row">
-          {([2, 3, 4, 5] as Level[]).map((n) => (
-            <label class="field" style="min-width:70px">Level {n} (min)<input inputMode="numeric" value={String(st.capacity[n])} onChange={(e) => actions.setSettings({ capacity: { ...st.capacity, [n]: Math.max(0, +(e.target as HTMLInputElement).value || 0) } })} /></label>
-          ))}
-        </div>
-        {st.restDay !== null && <p class="soft" style="font-size:14px">{st.restDayName} essentials are chosen per mission: open a mission and tap "Edit this mission".</p>}
       </div>
       <SyncCard />
       <SendFiles />
@@ -202,28 +88,6 @@ function SyncCard() {
   );
 }
 
-function Chores() {
-  const s = S(), list = s.missions.filter((m) => m.kind === 'chore' && !m.archived);
-  if (!list.length) return null;
-  return (
-    <div class="card narrow">
-      <h2>CHORES</h2>
-      {list.map((m) => {
-        const iv = choreInterval(s, m), last = choreLast(s, m), due = choreDue(s, m);
-        return (
-          <div style="display:flex;flex-direction:column;gap:6px">
-            <p><b>{m.title}</b> · about every {iv.days} days{iv.learned ? ' (learned)' : ''} · {last ? `last done ${fmtDate(last)}, next about ${fmtDate(due!)}` : 'not done in the app yet'}</p>
-            <div class="row">
-              <button type="button" class="small on" disabled={!!s.running} onClick={() => { actions.start(m.id, 1, m.steps?.[0]?.min || m.minutes, 0); toast(`${m.steps?.[0]?.title || m.title}: started`); }}>Starting it now</button>
-              <button type="button" class="small" onClick={() => setLocal({ sheet: 'mission', sheetArg: m.id })}>Edit</button>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 function SendFiles() {
   const [, bump] = useState(0);
   useEffect(() => onSyncStatus(() => bump((n) => n + 1)), []);
@@ -255,22 +119,3 @@ function SendFiles() {
   );
 }
 
-function Errands() {
-  const s = S(), list = s.missions.filter((m) => m.errand && !m.archived && (m.unitsLeft ?? 0) > 0);
-  if (!list.length) return null;
-  return (
-    <div class="card narrow">
-      <h2>ERRANDS</h2>
-      <p class="soft" style="font-size:14px">Planned on the next On Duty day or better that has room.</p>
-      {list.map((m) => (
-        <div class="row" style="justify-content:space-between">
-          <p><b>{m.title}</b>{m.window ? ` · ${fmtT(m.window[0])} to ${fmtT(m.window[1])}` : ''}</p>
-          <div class="row">
-            <button type="button" class="small" onClick={() => setLocal({ sheet: 'mission', sheetArg: m.id })}>Edit</button>
-            <button type="button" class="small" onClick={() => actions.saveMission({ ...m, archived: true })}>Remove</button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}

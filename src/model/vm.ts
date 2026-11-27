@@ -1,236 +1,48 @@
-import type { State, Mission } from './types';
-import { addDays, dateOf, diffDays, fmtDate, fmtDay, fmtDur, fmtT, minsOf, weekStart, weekday } from './time';
-import { describeUnits, rotationAt, forecast, layoutDay, nextLabels, orders, habitMin, habitTitle, habitsDue, type Forecast, type PlanItem } from './planner';
-import { levelName, nice } from './seed';
-import { bodyFat, choreDue, choreInterval, choreLast, exerciseCeiling, factor, partOf } from './learn';
-import { eventsOn, isBackupDay, isRest } from './schedule';
+import type { State } from './types';
+import { addDays, dateOf, fmtT } from './time';
+import { forecast, layoutDay, type Forecast, type PlanItem } from './planner';
+import { nice } from './seed';
 
+/** One row on the timeline, and what tapping it can do. */
 export interface PanelVM {
-  key: string; h: string; t: string; m?: string; d?: string; wide?: boolean;
-  time?: string; kick?: string; color?: string; fixed?: boolean; past?: boolean;
-  now?: boolean; done?: boolean; running?: boolean; alert?: boolean; tier?: 'final' | 'danger';
+  key: string; start: number; time: string; h: string; t: string; m?: string; d?: string; kick?: string; color?: string;
+  fixed?: boolean; past?: boolean; now?: boolean; done?: boolean; running?: boolean; must?: string;
   missionId?: string; units?: number; baseMin?: number; min?: number; step?: number; logId?: string;
-  act?: 'mission' | 'meal' | 'cook' | 'dishes' | 'morning' | 'backup' | 'choice' | 'event' | 'objective' | 'info';
-  evtId?: string; date?: string; objectiveId?: string; meal?: 'lunch' | 'dinner'; editable?: boolean;
+  act: 'mission' | 'meal' | 'cook' | 'dishes' | 'morning' | 'choice' | 'event' | 'info';
+  evtId?: string; date: string; meal?: 'lunch' | 'dinner';
 }
-export interface ChapterVM { title: string; panels: PanelVM[] }
-export interface IssueVM { key: string; title: string; sub: string; badge?: string; chapters: ChapterVM[] }
-export interface CollectionVM { key: string; title: string; sub: string; bg: string; fg: string; issues: IssueVM[] }
-export interface Library { cols: CollectionVM[]; fc: Forecast; today: string; todayItems: PlanItem[]; resume: { title: string; sub: string; ch: number; p: string } | null; rest: boolean; ahead: { title: string; date: string }[] }
+export interface DayVM { date: string; today: string; isToday: boolean; panels: PanelVM[]; items: PlanItem[]; fc: Forecast }
+/** How far ahead the day picker goes. */
+export const AHEAD = 14;
 
-const CH = ['MORNING', 'MIDDAY', 'AFTERNOON', 'EVENING'];
-
-function itemPanel(s: State, it: PlanItem, date: string, isToday: boolean): PanelVM {
+function panelOf(s: State, it: PlanItem, date: string, isToday: boolean): PanelVM {
   const b = it.block;
   const time = it.end > it.start ? `${fmtT(it.start)}–${fmtT(it.end)}` : fmtT(it.start);
+  const base = { key: it.key, start: it.start, time, t: it.title, m: it.sub, now: it.now, date };
   if (it.kind === 'mission') {
     const mi = s.missions.find((m) => m.id === it.missionId), ob = s.objectives.find((o) => o.id === mi?.objectiveId), sk = s.skills.find((k) => k.id === ob?.skillId);
-    return { time, kick: sk ? nice(sk.title) : mi?.kind === 'chore' ? 'Chore' : mi?.errand ? 'Errand' : undefined, color: sk?.bg, key: it.key, h: it.now && !it.running ? 'NOW' : fmtT(it.start), t: it.title, m: it.sub, d: it.detail, now: it.now, done: it.done, running: it.running, missionId: it.missionId, logId: it.logId, units: it.units, baseMin: it.baseMin, min: it.min, step: it.step, editable: s.missions.find((m) => m.id === it.missionId)?.kind === 'chore', act: 'mission', wide: it.now || (it.min || 0) >= 60, date };
+    return { ...base, kick: sk ? nice(sk.title) : mi?.kind === 'chore' ? 'Chore' : mi?.errand ? 'Errand' : undefined, color: sk?.bg, h: it.now && !it.running ? 'NOW' : fmtT(it.start), d: it.detail, done: it.done, running: it.running, must: it.must, missionId: it.missionId, logId: it.logId, units: it.units, baseMin: it.baseMin, min: it.min, step: it.step, act: 'mission' };
   }
-  const h = b!.kind === 'note' ? (b!.meal === 'lunch' ? 'LUNCH' : 'DINNER') : it.now && isToday ? 'NOW' : fmtT(it.start);
+  const day = s.days[date] || {};
   return {
-    // only what he marks is DONE; a fixed block whose time has passed is just past
-    time, fixed: true, key: it.key, h, t: it.title, m: it.sub, past: it.past && isToday, done: b!.key === 'f:morning' ? !!s.days[date]?.morningEnd : b!.key.startsWith('f:dishes') ? s.days[date]?.dishes?.[b!.key === 'f:dishes1' ? 'lunch' : 'dinner']?.end !== undefined : b!.key === 'f:cook' ? !!s.days[date]?.cookEnd : !!b!.ate, now: it.now, date,
+    ...base, fixed: true, past: it.past && isToday, evtId: b!.evtId, meal: b!.meal,
+    h: b!.kind === 'note' ? (b!.meal === 'lunch' ? 'LUNCH' : 'DINNER') : it.now && isToday ? 'NOW' : fmtT(it.start),
+    done: b!.key === 'f:morning' ? !!day.morningEnd : b!.key.startsWith('f:dishes') ? day.dishes?.[b!.key === 'f:dishes1' ? 'lunch' : 'dinner']?.end !== undefined : b!.key === 'f:cook' ? !!day.cookEnd : !!b!.ate,
     act: b!.key === 'f:cook' ? 'cook' : b!.key.startsWith('f:dishes') ? 'dishes' : b!.key === 'f:morning' ? 'morning' : b!.kind === 'meal' || b!.kind === 'note' ? 'meal' : b!.evtId ? (s.events.find((e) => e.id === b!.evtId)?.choices && b!.kind === 'event' ? 'choice' : 'event') : 'info',
-    evtId: b!.evtId, meal: b!.meal, wide: b!.kind === 'event',
     d: b!.kind === 'offduty' ? 'Rest counts. It feeds tomorrow.' : undefined,
   };
 }
 
-function dayIssue(s: State, fc: Forecast, date: string, now: number): { issue: IssueVM; items: PlanItem[] } {
-  const today = fc.today, isToday = date === today, sab = isRest(s, date), restName = s.settings.restDayName;
-  const items = layoutDay(s, fc, date, now);
-  const lv = s.days[date]?.level;
-  let chapters: ChapterVM[];
-  let sub: string;
-  const isTomorrow = diffDays(today, date) === 1;
-  if (isToday || isTomorrow) {
-    chapters = CH.map((title) => ({ title, panels: [] as PanelVM[] }));
-    const pl = fc.days.find((d) => d.date === date)?.level ?? 3;
-    const req = fc.requests.find((r) => r.date === date);
-    if (req) chapters[0].panels.push({ key: 'request', h: 'REQUEST', t: requestText(req.level), m: isToday ? 'To stay on track today.' : 'To stay on track that day.', wide: true, act: 'info', fixed: true });
-    if (isTomorrow && !lv) chapters[0].panels.push({ key: 'draft', h: 'PLANNED AHEAD', t: `Planned at ${nice(levelName(Math.round(pl)))} (level ${Math.round(pl)})`, m: 'It re-plans when you report in tomorrow.', wide: true, act: 'info', fixed: true });
-    if (isBackupDay(s, date)) chapters[0].panels.push({ key: 'backup', h: 'BACKUP', t: `Backup work day`, m: `This ${s.settings.restDayName} is planned like a normal day.`, wide: true, act: 'backup', date });
-    for (const it of items) { const p = itemPanel(s, it, date, isToday); if (it.tier && !it.done) p.tier = it.tier; chapters[partOf(it.start % 1440 < 300 ? 1439 : it.start)].panels.push(p); }
-    chapters.forEach((c) => { if (!c.panels.length) c.panels.push({ key: 'open', h: 'OPEN', t: 'Nothing queued', m: 'Rest counts too.', wide: true, act: 'info' }); });
-    sub = sab ? restName : lv ? `Level ${lv} · ${nice(levelName(lv))}` : isTomorrow ? 'Planned ahead' : 'Level not set yet';
-  } else if (date < today) {
-    const done = items.filter((i) => i.done && i.start > 0);
-    const panels = done.map((i) => itemPanel(s, i, date, false));
-    panels.push({ key: 'closed', h: 'CLOSED', t: 'Nothing carried over.', m: 'Unfinished work went back to the pool.', wide: true, act: 'info' });
-    chapters = [{ title: 'HOW IT WENT', panels }];
-    sub = 'Closed';
-  } else {
-    const cooking = !!s.days[date]?.cook;
-    const fx = items.filter((i) => i.kind === 'fixed' && ['event', 'offduty', 'note'].includes(i.block!.kind) || i.block?.key.startsWith('f:dishes') || (cooking && (i.block?.key === 'f:cook' || i.block?.key === 'f:dinner')));
-    const panels = fx.map((i) => itemPanel(s, i, date, false));
-    const day = fc.days.find((d) => d.date === date);
-    const work = (day?.blocks || []).filter((b) => !b.habit);
-    for (const m of s.missions) {
-      if (m.kind !== 'chore' || m.archived || (sab && !m.restOk)) continue;
-      const due = choreDue(s, m);
-      if (due === date) panels.unshift({ key: `due:${m.id}`, h: 'DUE', t: m.title, m: 'Planned on the day around being home', act: 'info', wide: true });
-    }
-    if (sab) panels.splice(panels.findIndex((p) => p.t === 'Off Duty'), 0,
-      { key: 'ess', h: 'DAY', t: 'Essentials only', m: 'Need it? It can be a backup work day this week.', wide: true, act: 'backup', date },
-      { key: 'debrief', h: 'EVE', t: 'Debrief', m: 'Progress, what the app learned, next week', act: 'info' },
-      { key: 'shifts', h: 'EVE', t: 'Enter shifts', m: 'Posted on Sundays', act: 'info' });
-    else if (work.length) {
-      const names = [...new Set(work.map((b) => s.objectives.find((o) => o.id === s.missions.find((m) => m.id === b.missionId)?.objectiveId)?.title))].slice(0, 3);
-      panels.unshift({ key: 'pencil', h: 'PENCILLED', t: `About ${fmtDur(work.reduce((a, b) => a + b.min, 0))} of missions`, m: names.map((n) => nice(n || '')).join(' · '), d: 'Planned against a modest day. The real plan is dealt when you set that day\'s level.', wide: true, act: 'info' });
-    }
-    if (isBackupDay(s, date)) panels.unshift({ key: 'backup', h: 'BACKUP', t: 'Backup work day', m: `This ${s.settings.restDayName} is planned like a normal day.`, wide: true, act: 'backup', date });
-    chapters = [{ title: 'ON THE SCHEDULE', panels }];
-    const ev = items.find((i) => i.block?.kind === 'event');
-    sub = sab ? restName : ev ? `${ev.title.length > 14 ? ev.title.slice(0, 13) + '…' : ev.title} ${fmtT(ev.start)}` : items.some((i) => i.block?.key.startsWith('f:dishes')) ? 'Dishes' : 'Open';
-  }
-  return { issue: { key: date, title: fmtDay(date), sub, badge: isToday ? 'TODAY' : undefined, chapters }, items };
+export function dayView(s: State, now: number, date?: string): DayVM {
+  const fc = forecast(s, now), today = fc.today;
+  const d = date && date >= today && date <= addDays(today, AHEAD) ? date : today;
+  const items = layoutDay(s, fc, d, now);
+  return { date: d, today, isToday: d === today, items, fc, panels: items.map((it) => panelOf(s, it, d, d === today)) };
 }
 
-const cap1 = (x: string) => x[0].toUpperCase() + x.slice(1);
-
-function missionPanel(s: State, m: Mission, level: number): PanelVM {
-  const f = factor(s, m.id);
-  if (m.kind === 'chore') {
-    const steps = m.steps?.length ? m.steps : [{ at: 0, min: m.minutes, title: m.title }];
-    const iv = choreInterval(s, m), last = choreLast(s, m), due = choreDue(s, m);
-    const span = steps[steps.length - 1].at + steps[steps.length - 1].min;
-    return { key: `mi:${m.id}`, h: 'CHORE', t: m.title, m: `${steps.reduce((a, x) => a + x.min, 0)} min hands-on over ${fmtDur(span)} · about every ${iv.days} days${iv.learned ? ' (learned)' : ''}`,
-      d: last ? `Last done ${fmtDate(last)}. Next one is planned for about ${fmtDate(due!)}.` : 'Not planned until it has been done once. Start it here when you run it, or set the last time in Edit.',
-      missionId: m.id, units: 1, baseMin: steps[0].min, min: steps[0].min, step: 0, act: 'mission', editable: true };
-  }
-  if (m.kind === 'habit') {
-    const base = habitMin(m, level);
-    const bits = [`${Math.round(base * f)} min`, m.everyDays ? (m.everyDays === 2 ? 'every other day' : `every ${m.everyDays} days`) : 'daily'];
-    if (m.minutesAt5) bits.push(`${m.minutesAt5} on Plus Ultra`);
-    return { key: `mi:${m.id}`, h: 'MISSION', t: m.title, m: bits.join(' · '), d: m.note, missionId: m.id, units: 1, baseMin: base, min: Math.round(base * f), act: 'mission', editable: true };
-  }
-  if (m.kind === 'work') {
-    const left = m.unitsLeft || 0;
-    let u = Math.min(m.maxBlockUnits || 3, Math.max(1, left));
-    if (m.labels?.length) { const at0 = m.labels.length - left; while (u < left && m.labels[at0 + u] === m.labels[at0 + u - 1]) u++; }
-    const done = left <= 0;
-    const next = done ? '' : describeUnits(nextLabels(m, u));
-    const summary = done ? 'Complete' : m.labels?.length ? `About ${fmtDur(left * m.minutes * f)} left` : `${left} ${left === 1 ? 'block' : 'blocks'} left · about ${fmtDur(left * m.minutes * f)}`;
-    return { key: `mi:${m.id}`, h: 'MISSION', t: m.title, m: next ? `Next: ${next} · ${summary.toLowerCase()}` : summary, d: m.note, done, missionId: done ? undefined : m.id, units: u, baseMin: u * m.minutes, min: Math.round(u * m.minutes * f), act: done ? 'info' : 'mission', editable: true };
-  }
-  if (m.rotation?.length) {
-    const nx = rotationAt(s, m);
-    return { key: `mi:${m.id}`, h: 'MISSION', t: m.title, m: `Next: ${nx.title} · ${Math.round(m.minutes * f)} min`, d: [nx.detail, m.note].filter(Boolean).join('\n\n'), missionId: m.id, units: 1, baseMin: m.minutes, min: Math.round(m.minutes * f), act: 'mission', editable: true };
-  }
-  return { key: `mi:${m.id}`, h: 'MISSION', t: m.title, m: `${Math.round(m.minutes * f)} min blocks${m.dailyCapMin ? ` · up to ${fmtDur(m.dailyCapMin)} a day` : ''}`, d: m.note, missionId: m.id, units: 1, baseMin: m.minutes, min: Math.round(m.minutes * f), act: 'mission', editable: true };
+/** What comes after the current item today. */
+export function nextAfter(items: PlanItem[], key: string): PlanItem | null {
+  const i = items.findIndex((x) => x.key === key);
+  return items.find((x, j) => j > i && !x.done && !x.past && x.kind === 'mission') || null;
 }
-
-export function buildLibrary(s: State, now: number): Library {
-  const fc = forecast(s, now);
-  const today = fc.today;
-  const level = s.days[today]?.level ?? 3;
-  const ws = weekStart(today);
-  let todayItems: PlanItem[] = [];
-  const week: CollectionVM = { key: 'week', title: 'THIS WEEK', sub: `${fmtDate(ws)} to ${fmtDate(addDays(ws, 6)).split(' ')[1]} · one comic per day`, bg: '#D92B21', fg: '#FFFFFF', issues: [] };
-  for (let i = 0; i < 7; i++) {
-    const { issue, items } = dayIssue(s, fc, addDays(ws, i), now);
-    week.issues.push(issue);
-    if (addDays(ws, i) === today) todayItems = items;
-  }
-  const riskOf = new Map(fc.risks.map((r) => [r.objectiveId, r]));
-  const cols: CollectionVM[] = [week];
-  for (const sk of s.skills) {
-    const issues: IssueVM[] = s.objectives.filter((o) => o.skillId === sk.id).map((o) => {
-      const ms = chainOrder(s.missions.filter((m) => m.objectiveId === o.id && !m.archived));
-      const risk = riskOf.get(o.id);
-      const stand: PanelVM[] = [
-        { key: 'status', h: 'STATUS', t: o.done ? `Complete${o.doneAt ? ' · ' + fmtDate(o.doneAt) : ''}` : o.status, wide: true, act: 'objective', objectiveId: o.id, done: o.done },
-        { key: 'target', h: 'TARGET', t: o.target, wide: true, act: 'info' },
-      ];
-      const work = ms.filter((m) => m.kind === 'work');
-      if (work.length && !o.done) {
-        const left = work.reduce((a, m) => a + (m.unitsLeft || 0) * m.minutes * factor(s, m.id), 0);
-        const total = work.reduce((a, m) => a + (m.unitsTotal || 0) * m.minutes * factor(s, m.id), 0);
-        stand.push({ key: 'progress', h: 'PROGRESS', t: `${Math.round(100 * (1 - left / Math.max(1, total)))}% · about ${fmtDur(left)} to go`, wide: true, act: 'info' });
-      }
-      if (o.id === 'volume') {
-        const ex = exerciseCeiling(s, today);
-        stand.push({ key: 'progress', h: 'THIS WEEK', t: `${Math.round(ex.done)} of ${ex.cap} min of exercise`, m: `This week's ceiling. It grows about ${Math.round(s.settings.exGrowth * 100)}% a week once most of it gets done and flares stay quiet, up to ${s.settings.exTop} min. Daily base routines never count against it.`, wide: true, act: 'info' });
-      }
-      if (o.id === 'physique' && s.measures.length) {
-        const m = s.measures[s.measures.length - 1];
-        stand.push({ key: 'progress', h: 'LATEST', t: `${m.weight} lb · about ${bodyFat(m.neck, m.navel, s.settings.heightIn).toFixed(1)}% body fat`, m: `Measured ${fmtDate(m.date)} · neck ${m.neck} in, navel ${m.navel} in`, wide: true, act: 'info' });
-      }
-      if (o.due && !o.done) {
-        const land = fc.landing[o.id];
-        stand.push(risk
-          ? { key: 'deadline', h: 'AT RISK', t: land ? `At a modest pace this lands about ${fmtDate(land)}` : 'At a modest pace this does not land in time', m: `${o.dueLabel || 'Due ' + fmtDate(o.due)}`, d: [`That is ${land ? diffDays(o.due, land) + ' days' : 'well'} past the deadline unless good days pull it forward.`, o.riskNote].filter(Boolean).join(' '), wide: true, alert: true, act: 'info' }
-          : { key: 'deadline', h: 'DEADLINE', t: o.dueLabel || `Due ${fmtDate(o.due)}`, m: land ? `On pace · lands about ${fmtDate(land)}` : 'On pace', wide: true, act: 'info' });
-      }
-      const chapters: ChapterVM[] = [{ title: 'WHERE IT STANDS', panels: stand }];
-      if (ms.length) chapters.push({ title: 'MISSIONS', panels: ms.map((m) => missionPanel(s, m, level)) });
-      const learned: PanelVM[] = [];
-      for (const m of ms) {
-        const f = factor(s, m.id);
-        if (Math.abs(f - 1) >= 0.1) learned.push({ key: `l:${m.id}`, h: 'LEARNED', t: `${m.title} really takes about ${Math.round(m.minutes * f)} min`, m: `Estimate was ${m.minutes} min. Plans now use the real number.`, wide: true, act: 'info' });
-      }
-      if (!learned.length) learned.push({ key: 'l:none', h: 'LEARNED', t: 'Nothing yet.', m: 'This page fills in as days get logged.', wide: true, act: 'info' });
-      chapters.push({ title: 'WHAT THE APP LEARNED', panels: learned });
-      return { key: o.id, title: o.title, sub: o.done ? 'Complete' : o.sub, badge: o.done ? 'DONE' : risk ? 'AT RISK' : undefined, chapters };
-    });
-    cols.push({ key: sk.id, title: sk.title, sub: sk.sub, bg: sk.bg, fg: sk.fg, issues });
-  }
-  const od = orders(todayItems);
-  const rest = isRest(s, today);
-  let resume: Library['resume'] = null;
-  const cur = od.now || od.next;
-  if (cur) {
-    const ch = partOf(cur.start % 1440 < 300 ? 1439 : cur.start);
-    resume = { title: cur.title.toUpperCase(), sub: `Today · ${cap1(CH[ch].toLowerCase())} · ${od.now ? (cur.kind === 'mission' ? (rest ? 'now' : 'current mission') : 'now') : 'up next at ' + fmtT(cur.start)}`, ch, p: cur.key };
-  }
-  void eventsOn; void dateOf; void minsOf;
-  // Heads-up a day or two before a repeating chore is needed.
-  const ahead = s.missions.filter((m) => m.kind === 'chore' && !m.archived).flatMap((m) => {
-    const due = choreDue(s, m);
-    return due && due > today && due <= addDays(today, 2) ? [{ title: m.title, date: due }] : [];
-  });
-  return { cols, fc, today, todayItems, resume, rest, ahead };
-}
-
-/** The floor line shown on the Status Report for a level. */
-export function floorText(s: State, date: string, level: number): string {
-  const due = habitsDue(s, date, level).filter((m) => !m.notFloor);
-  if (!due.length) return isRest(s, date) ? `${s.settings.restDayName}: essentials only.` : 'Rest. That is the whole job today.';
-  return due.map((m) => `${habitTitle(m, level).replace(/^[^:]+:\s*/, '')} ${m.lowTitle && level <= 2 ? '' : habitMin(m, level) + ' min'}`.trim()).join(' · ');
-}
-
-/** HQ's request for a level, in the comic's words. */
-export function requestText(level: number): string {
-  const who = level >= 5 ? 'a Hero willing to Go Beyond' : level === 4 ? 'an Active Hero' : level === 3 ? 'a Hero On Duty' : 'a Hero on Standby';
-  return `REQUEST: HQ is searching for ${who} (level ${level})`;
-}
-
-let lateMemo: { key: string; titles: string[] } | null = null;
-/**
- * The night before: would getting up an hour late tomorrow lose a deadline? (A FINAL STAND that needs the
- * whole morning.) Returns the deadlines it would lose; empty if a late start is survivable.
- */
-export function lateRisk(s: State, now: number): string[] {
-  const today = dateOf(now), tomorrow = addDays(today, 1);
-  const key = JSON.stringify([s.updatedAt, today]);
-  if (lateMemo?.key === key) return lateMemo.titles;
-  const base = forecast(s, now);
-  const probe: State = { ...s, days: { ...s.days, [tomorrow]: { ...(s.days[tomorrow] || {}), lateBy: 60 } }, updatedAt: -Math.random() };
-  const late = forecast(probe, now);
-  const was = new Set(base.risks.map((r) => r.objectiveId));
-  const titles = late.risks.filter((r) => !was.has(r.objectiveId)).map((r) => r.title);
-  forecast(s, now); // put the real forecast back in the cache
-  lateMemo = { key, titles };
-  return titles;
-}
-
-/** Tasks in the order they happen: anything a task waits on comes before it (otherwise as entered). */
-function chainOrder<T extends { id: string; after?: string[]; afterNoWait?: string[] }>(ms: T[]): T[] {
-  const ids = new Set(ms.map((m) => m.id)), left = [...ms], out: T[] = [];
-  while (left.length) {
-    const i = left.findIndex((m) => [...(m.after || []), ...(m.afterNoWait || [])].every((d) => !ids.has(d) || out.some((o) => o.id === d)));
-    out.push(left.splice(i < 0 ? 0 : i, 1)[0]);
-  }
-  return out;
-}
+void dateOf;

@@ -536,7 +536,7 @@ export function forecast(s: State, now: number): Forecast {
       if (m.kind === 'work') flexUnits.set(m.id, (flexUnits.get(m.id) || 0) - u);
       else weekMin.set(wk(m.id, d.date), (weekMin.get(wk(m.id, d.date)) || 0) + min);
     }
-    days.push({ date: d.date, level: d.level, rest: d.rest, blocks, capMin: d.comfort, deadlineMin: sd.deadline, lock });
+    days.push({ date: d.date, level: d.level, rest: d.rest, blocks: blocks.filter((b) => !byId.get(b.missionId)?.skipOn?.includes(d.date)), capMin: d.comfort, deadlineMin: sd.deadline, lock });
   }
 
   // ---- 5. Landing dates, risks, and lock-in.

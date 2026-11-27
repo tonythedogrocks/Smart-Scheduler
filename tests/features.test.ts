@@ -1196,3 +1196,16 @@ describe('breakfast counts as a meal', () => {
     if (it) expect(it.start).toBeGreaterThanOrEqual(11 * 60 + 10 - 10 + 60); // breakfast ended 10 min before the routine (nowhere to be right after)
   });
 });
+
+describe('skipOn', () => {
+  it('leaves a task out on the dates it cannot happen', () => {
+    const s: any = sample();
+    const fc0: any = forecast(s, Date.now());
+    const b = fc0.days.find((d: any) => d.blocks.length)!;
+    const id = b.blocks[0].missionId;
+    const s1: any = sample();
+    s1.missions.find((m: any) => m.id === id).skipOn = [b.date];
+    const fc1: any = forecast(s1, Date.now());
+    expect(fc1.days.find((d: any) => d.date === b.date).blocks.some((x: any) => x.missionId === id)).toBe(false);
+  });
+});

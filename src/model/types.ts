@@ -28,6 +28,7 @@ export interface Mission {
   labels?: string[];       // work: what each unit is, in order, as "Group|item" (e.g. "Chapter 2|lesson 3")
   afterNoWait?: string[];  // unlocks when these are done, without waiting out their clocks
   notBefore?: string;      // not planned before this date
+  skipOn?: string[];       // dates it can't happen (e.g. courts closed); left out of those days
   maxBlockUnits?: number;
   dailyCapMin?: number;
   weeklyMin?: number;

@@ -59,10 +59,10 @@ describe('a day', () => {
     s2.missions.find((m) => m.id === 'court')!.skipOn = [MON];
     expect(tasks(plan(s2)).some((i) => i.missionId === 'court')).toBe(false);
   });
-  it('the weekly rest day has the floor and nothing more', () => {
+  it('the weekly rest day has the core floor and nothing more', () => {
     const sun = '2026-11-15', xs = tasks(plan(fresh(), sun));
     expect(xs.length).toBeGreaterThan(0);
-    expect(xs.every((i) => ['cards', 'stretch', 'strength', 'breathe', 'vocal'].includes(i.missionId!))).toBe(true);
+    expect(xs.every((i) => ['cards', 'stretch', 'strength', 'breathe'].includes(i.missionId!))).toBe(true);
   });
   it('steps of a chain stay in order', () => {
     const s = fresh();
@@ -137,3 +137,4 @@ describe('FINAL SHOT', () => {
     expect(tasks(layoutDay(s, fc, MON, NOW)).some((i) => i.missionId === 'exam-steps' && i.must === 'final')).toBe(true);
   });
 });
+

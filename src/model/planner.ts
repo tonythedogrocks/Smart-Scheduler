@@ -37,7 +37,9 @@ export interface Forecast {
   must: Record<string, { kind: 'final' | 'danger'; title: string }>;
 }
 
-const WEIGHT = [0, 100, 80, 60, 30, 15, 8, 2];
+/** The ranking, most important first. */
+const R = { due: 1, final: 2, core: 3, danger: 4, deadline: 5, floor: 6, big: 7, ahead: 8, minor: 9, extra: 10 };
+const WEIGHT = [0, 100, 95, 90, 80, 60, 50, 30, 15, 8, 2];
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
 const round5 = (x: number) => Math.ceil(x / 5) * 5;
 export const GRACE = 5;
@@ -429,14 +431,18 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   if (!isToday) for (const m of s.missions) if (m.kind === 'habit' && m.everyDays) { let ld = lastDone(s, m.id); for (let d = today; d < date; d = addDays(d, 1)) if (habitsDue(s, d, new Map([[m.id, ld]])).some((x) => x.id === m.id)) ld = d; last.set(m.id, ld); }
   for (const m of habitsDue(s, date, isToday ? undefined : last)) {
     if (doneToday(m.id).length || run?.missionId === m.id) continue;
-    if (isFloor(m)) add(m, 1, 1, unit(m)); else if (m.notFloor) add(m, 2, 1, unit(m)); else if (!sab) add(m, 6, 1, unit(m));
+    if (isFloor(m)) { if (m.core) add(m, R.core, 1, unit(m)); else if (!sab) add(m, R.floor, 1, unit(m)); }
+    else if (m.notFloor) add(m, R.due, 1, unit(m)); else if (!sab) add(m, R.minor, 1, unit(m));
   }
-  for (const m of s.missions) if (m.errand && !m.archived && unitsLeftNow(m) > 0 && (!m.onDate || m.onDate === date) && (!m.notBefore || date >= m.notBefore)) add(m, m.onDate ? 2 : 6, unitsLeftNow(m), unitsLeftNow(m) * unit(m) + 2 * (m.travel || 0));
+  for (const m of s.missions) if (m.errand && !m.archived && unitsLeftNow(m) > 0 && (!m.onDate || m.onDate === date) && (!m.notBefore || date >= m.notBefore)) add(m, m.onDate ? R.due : R.minor, unitsLeftNow(m), unitsLeftNow(m) * unit(m) + 2 * (m.travel || 0));
   // deadline work, in blocks no longer than each task allows
   for (const n of fc.days.find((d) => d.date === date)?.needs || []) {
-    const m = byId.get(n.missionId); if (!m || (sab && !fc.must[m.id])) continue;
+    const m = byId.get(n.missionId); if (!m) continue;
+    const tag = isToday ? fc.must[m.id]?.kind : undefined;
+    const row = n.row === 5 ? R.ahead : tag === 'final' ? R.final : tag === 'danger' ? R.danger : R.deadline;
+    if (sab && row > R.core) continue;
     const per = n.min / n.units, max = Math.max(1, m.maxBlockUnits || n.units);
-    for (let left = n.units; left > 0; left -= max) { const u = Math.min(max, left); add(m, n.row, u, u * per); }
+    for (let left = n.units; left > 0; left -= max) { const u = Math.min(max, left); add(m, row, u, u * per); }
   }
   // the big goals, up to their weekly targets; others up to theirs
   const capOf = (m: Mission) => Math.max(m.dailyCapMin || 0, ...Object.values(m.capByLevel || {})) || 120;
@@ -461,8 +467,8 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     if (min >= Math.min(15, u1) * 0.6) {
       const units = m.kind === 'work' ? Math.max(1, Math.round(min / u1)) : 1;
       const len = m.kind === 'work' ? units * u1 : Math.max(Math.min(u1, capOf(m)), Math.round(min / 5) * 5);
-      if (m.kind !== 'work' && m.sessionMax && len > m.sessionMax) { const n = Math.ceil(len / m.sessionMax); for (let i = 0; i < n; i++) add(m, isBig(m) ? 4 : 6, 1, len / n); }
-      else add(m, isBig(m) ? 4 : 6, units, len + 2 * (m.travel || 0));
+      if (m.kind !== 'work' && m.sessionMax && len > m.sessionMax) { const n = Math.ceil(len / m.sessionMax); for (let i = 0; i < n; i++) add(m, isBig(m) ? R.big : R.minor, 1, len / n); }
+      else add(m, isBig(m) ? R.big : R.minor, units, len + 2 * (m.travel || 0));
     }
     if (!isExercise(m)) extra.push(m);
   }
@@ -473,7 +479,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   const openBuckets = [...new Set(slots.flatMap(([a, b]) => { const out: number[] = []; for (let x = a; x < b; x += 15) out.push(bucketOf(x)); return out; }))];
   const explore = new Map<string, number>();
   {
-    const cands = needs.filter((n) => n.row >= 4 && !fc.must[n.missionId]).map((n) => byId.get(n.missionId)!).filter((m) => openBuckets.some((b) => odds.n(typeOf(m), b) < 6));
+    const cands = needs.filter((n) => n.row >= R.big && !fc.must[n.missionId]).map((n) => byId.get(n.missionId)!).filter((m) => openBuckets.some((b) => odds.n(typeOf(m), b) < 6));
     const h = hash(date);
     for (let i = 0; i < Math.min(2, cands.length); i++) {
       const m = cands[(h + i * 7) % cands.length];
@@ -509,12 +515,12 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     if (len >= 45) slots = slots.map(([x, y]) => (x === at + len ? [x + (s.settings.breakMin ?? 10), y] : [x, y]) as [number, number]).filter(([x, y]) => y - x >= 5);
     const skip = used.get(m.id) || 0;
     used.set(m.id, skip + (m.rotation?.length ? 1 : units));
-    items.push({ key: keyFor(m.id), start: at, end: at + len, title: m.title, sub: label(m, Math.round(len), units, skip), detail: detailOf(s, m, skip), kind: 'mission', missionId: m.id, units, baseMin: m.kind === 'work' ? units * m.minutes : m.minutes, min: Math.round(len), ...(fc.must[m.id] && row === 3 ? { must: fc.must[m.id].kind } : {}) });
+    items.push({ key: keyFor(m.id), start: at, end: at + len, title: m.title, sub: label(m, Math.round(len), units, skip), detail: detailOf(s, m, skip), kind: 'mission', missionId: m.id, units, baseMin: m.kind === 'work' ? units * m.minutes : m.minutes, min: Math.round(len), ...(fc.must[m.id] && (row === R.final || row === R.danger) ? { must: fc.must[m.id].kind } : {}) });
   };
   /** Best start for a task, or null. Scored by how often this kind of work gets done then. */
   const best = (m: Mission, len: number, row: number) => {
     const L = limits(m);
-    const urgent = row === 3 && (!!fc.must[m.id] || [...allDeps(m.id)].length === 0 && needs.some((n) => n.missionId !== m.id && allDeps(n.missionId).has(m.id)));
+    const urgent = (row === R.final || row === R.danger || row === R.deadline) && (!!fc.must[m.id] || [...allDeps(m.id)].length === 0 && needs.some((n) => n.missionId !== m.id && allDeps(n.missionId).has(m.id)));
     const ex = explore.get(m.id);
     let top: { a: number; sc: number } | null = null;
     for (const [x, y] of slots) for (let a = round5(Math.max(x, L.lo)); a + len <= Math.min(y, L.hi); a += 5) {
@@ -531,16 +537,15 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   // regret: how much a task loses if it can't have its best time of day
   const regret = (n: Need) => { const m = byId.get(n.missionId)!; const r = openBuckets.map((b) => odds.rate(typeOf(m), b)).sort((a, b) => b - a); return (r[0] || 0) - (r[1] ?? 0); };
   const queue = [...needs].sort((a, b) => WEIGHT[b.row] + (byId.get(b.missionId)?.priority || 0) - WEIGHT[a.row] - (byId.get(a.missionId)?.priority || 0) || regret(b) - regret(a));
-  let chores = false;
+  placeChores(); // chores due today are due-today work: their steps go on the clock first
   while (queue.length) {
     const i = Math.max(0, queue.findIndex((n) => [...allDeps(n.missionId)].every((d) => !queue.some((q) => q.missionId === d))));
     const n = queue.splice(i, 1)[0];
-    if (!chores && n.row > 3) { placeChores(); chores = true; }
     const m = byId.get(n.missionId)!;
     if ([...allDeps(m.id)].some((d) => unplaced.has(d))) { unplaced.add(m.id); continue; }
     let got = best(m, n.min, n.row);
     // FINAL SHOT work that doesn't fit anywhere else may take Off Duty time
-    if (!got && fc.must[m.id]?.kind === 'final' && n.row === 3) {
+    if (!got && n.row === R.final) {
       const off = fixed.find((b) => b.kind === 'offduty');
       if (off) { const keep = slots; slots = [...slots, [Math.max(off.start, round5(nowMin)), off.end] as [number, number]]; got = best(m, n.min, n.row); if (!got) slots = keep; }
     }
@@ -556,7 +561,6 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     }
     if (left > 0) unplaced.add(m.id);
   }
-  if (!chores) placeChores();
   // ---- Fill what's left of the day: more of the big goals, then smaller ones, then getting further ahead.
   if (!sab) {
     const order = extra.sort((a, b) => Number(isBig(b)) - Number(isBig(a)) || (b.priority || 0) - (a.priority || 0) || Number(!s.objectives.find((o) => o.id === a.objectiveId)?.due) - Number(!s.objectives.find((o) => o.id === b.objectiveId)?.due));
@@ -577,8 +581,8 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
           len = units * u1;
         }
         len += 2 * (m.travel || 0);
-        const g = best(m, Math.round(len), 7);
-        if (g) { placeAt(m, g.a, Math.round(len), units, 7); placed = true; }
+        const g = best(m, Math.round(len), R.extra);
+        if (g) { placeAt(m, g.a, Math.round(len), units, R.extra); placed = true; }
       }
       if (!placed) break;
     }

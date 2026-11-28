@@ -169,7 +169,7 @@ export function forecast(s: State, now: number): Forecast {
   const brk = s.settings.breakMin ?? 10;
   const exCap = exerciseCeiling(s, today).cap;
   const last = new Map(live.filter((m) => m.kind === 'habit').map((m) => [m.id, lastDone(s, m.id)]));
-  const days: { date: string; sab: boolean; free: number; max: number; real: number; floor: number; big: number }[] = [];
+  const days: { date: string; sab: boolean; free: number; max: number; real: number; floor: number; big: number; sabFree: number; sabReal: number }[] = [];
   for (let t = 0; t <= H; t++) {
     const date = addDays(today, t), sab = isSabbath(s, date);
     const fx = fixedBlocks(s, date), from = t === 0 ? round5(minsOf(now)) : 0;
@@ -196,8 +196,9 @@ export function forecast(s: State, now: number): Forecast {
     }
     const workFree = Math.max(0, free - floor);
     const real = sab ? 0 : share * Math.max(0, workFree - hold); // today: what's left of today's free time
-    days.push({ date, sab, free: sab ? 0 : workFree, max: sab ? 0 : workFree + offMin, real, floor, big: Math.min(big, workFree) });
+    days.push({ date, sab, free: sab ? 0 : workFree, max: workFree + offMin, real, floor, big: Math.min(big, workFree), sabFree: sab ? workFree : 0, sabReal: sab ? share * Math.max(0, workFree - hold) : 0 });
   }
+  let sunCap = 0; // minutes a rest day gives deadlines, only when that's what saves one
   const realW = days.map((d) => d.real);
   const avgW = realW.reduce((a, b) => a + b, 0) / Math.max(1, realW.length);
   const safeOf = (o: Objective, extra: number) => {
@@ -220,7 +221,7 @@ export function forecast(s: State, now: number): Forecast {
     for (let t = 0; t < from; t++) alloc.push([]);
     for (let t = from; t <= H; t++) {
       const d = days[t], out: Need[] = [], usedBy = new Map<string, number>();
-      let left = mode === 'real' ? d.real : mode === 'max' ? d.max : d.free;
+      let left = d.sab && mode !== 'max' ? Math.min(sunCap, mode === 'real' ? d.sabReal : d.sabFree) : mode === 'real' ? d.real : mode === 'max' ? d.max : d.free;
       const give = (o: Objective, amount: number, row: number) => {
         let ow = Math.min(remaining(o.id), (owed.get(o.id + row) || 0) + amount);
         for (let progressed = true; progressed;) {
@@ -252,7 +253,7 @@ export function forecast(s: State, now: number): Forecast {
         if (safe > H) denom += (safe - H) * avgW;
         return denom > 0 ? (rem * realW[t]) / denom : rem;
       };
-      if (!d.sab) {
+      if (left > 0) {
         if (mode === 'max') for (const o of order) give(o, 1e9, 3);
         else {
           // needed today: the pace share, or more when the days ahead (at his usual pace) can't cover what's left
@@ -266,7 +267,7 @@ export function forecast(s: State, now: number): Forecast {
           });
           order.forEach((o, i) => give(o, sh[i][0], 3));
           if (mode === 'real') left -= Math.min(left, d.big); // the big goals take their share before getting ahead
-          order.forEach((o, i) => give(o, Math.max(0, sh[i][1] - sh[i][0]), 5));
+          if (!d.sab) order.forEach((o, i) => give(o, Math.max(0, sh[i][1] - sh[i][0]), 5));
         }
       }
       alloc.push(out);
@@ -282,6 +283,19 @@ export function forecast(s: State, now: number): Forecast {
   };
   const late = (x: Sim, o: Objective) => { const d = landOf(x, o), due = diffDays(today, o.due!); return d === null ? due <= H : d > due; };
 
+  // Rest days: used for deadline work only when that's what makes a deadline at his usual pace, and only as much as it takes
+  {
+    const due = deadlineObjs.filter((o) => diffDays(today, o.due!) <= H);
+    const setCap = (c: number) => { sunCap = c; days.forEach((d, i) => { if (d.sab) realW[i] = Math.min(c, d.sabReal); }); };
+    const lateAt = (c: number) => { setCap(c); const r = simulate('real'); return due.filter((o) => late(r, o)).map((o) => o.id); };
+    const without = lateAt(0), top = Math.max(0, ...days.map((d) => d.sabReal));
+    const saved = (c: number) => { const l = lateAt(c); return without.some((id) => !l.includes(id)) && l.every((id) => without.includes(id)); };
+    if (without.length && top > 0 && saved(top)) {
+      let lo = 0, hi = top;
+      while (hi - lo > 15) { const mid = (lo + hi) / 2; if (saved(mid)) hi = mid; else lo = mid; }
+      setCap(hi);
+    } else setCap(0);
+  }
   const plan = simulate('plan'), real = simulate('real'), max = simulate('max');
   const landing: Record<string, string | null> = {};
   const warns: Warn[] = [];
@@ -439,7 +453,8 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   for (const n of fc.days.find((d) => d.date === date)?.needs || []) {
     const m = byId.get(n.missionId); if (!m) continue;
     const tag = isToday ? fc.must[m.id]?.kind : undefined;
-    const row = n.row === 5 ? R.ahead : tag === 'final' ? R.final : tag === 'danger' ? R.danger : R.deadline;
+    // on a rest day, deadline work is only there because it's what saves a deadline: DANGER ZONE
+    const row = n.row === 5 ? R.ahead : tag === 'final' ? R.final : tag === 'danger' || sab ? R.danger : R.deadline;
     if (sab && row > R.danger) continue;
     const per = n.min / n.units, max = Math.max(1, m.maxBlockUnits || n.units);
     for (let left = n.units; left > 0; left -= max) { const u = Math.min(max, left); add(m, row, u, u * per); }
@@ -515,7 +530,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     if (len >= 45) slots = slots.map(([x, y]) => (x === at + len ? [x + (s.settings.breakMin ?? 10), y] : [x, y]) as [number, number]).filter(([x, y]) => y - x >= 5);
     const skip = used.get(m.id) || 0;
     used.set(m.id, skip + (m.rotation?.length ? 1 : units));
-    items.push({ key: keyFor(m.id), start: at, end: at + len, title: m.title, sub: label(m, Math.round(len), units, skip), detail: detailOf(s, m, skip), kind: 'mission', missionId: m.id, units, baseMin: m.kind === 'work' ? units * m.minutes : m.minutes, min: Math.round(len), ...(fc.must[m.id] && (row === R.final || row === R.danger) ? { must: fc.must[m.id].kind } : {}) });
+    items.push({ key: keyFor(m.id), start: at, end: at + len, title: m.title, sub: label(m, Math.round(len), units, skip), detail: detailOf(s, m, skip), kind: 'mission', missionId: m.id, units, baseMin: m.kind === 'work' ? units * m.minutes : m.minutes, min: Math.round(len), ...(row === R.final || row === R.danger ? { must: fc.must[m.id]?.kind ?? 'danger' } : {}) });
   };
   /** Best start for a task, or null. Scored by how often this kind of work gets done then. */
   const best = (m: Mission, len: number, row: number) => {

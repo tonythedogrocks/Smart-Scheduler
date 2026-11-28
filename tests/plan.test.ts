@@ -60,7 +60,8 @@ describe('a day', () => {
     expect(tasks(plan(s2)).some((i) => i.missionId === 'court')).toBe(false);
   });
   it('the weekly rest day has the core floor and nothing more', () => {
-    const sun = '2026-11-15', xs = tasks(plan(fresh(), sun));
+    const s = fresh(); for (const o of s.objectives) if (o.due) o.due = '2027-06-01';
+    const sun = '2026-11-15', xs = tasks(plan(s, sun));
     expect(xs.length).toBeGreaterThan(0);
     expect(xs.every((i) => ['cards', 'stretch', 'strength', 'breathe'].includes(i.missionId!))).toBe(true);
   });
@@ -138,3 +139,21 @@ describe('FINAL SHOT', () => {
   });
 });
 
+
+describe('rest day', () => {
+  const SUN = '2026-11-15';
+  it('stays free of deadline work when the deadlines are on time anyway', () => {
+    const s = fresh(); for (const o of s.objectives) if (o.due) o.due = '2027-06-01';
+    expect(tasks(plan(s, SUN)).some((i) => s.missions.find((m) => m.id === i.missionId)?.kind === 'work')).toBe(false);
+  });
+  it('takes the least deadline work that saves a deadline, marked DANGER ZONE', () => {
+    let used = false;
+    for (const u of [60, 70, 80, 90, 100, 110, 120]) {
+      const s = fresh();
+      s.missions.find((m) => m.id === 'course-lessons')!.unitsLeft = u;
+      const xs = tasks(plan(s, SUN)).filter((i) => s.missions.find((m) => m.id === i.missionId)?.kind === 'work');
+      if (xs.length) { used = true; expect(xs.every((i) => i.must)).toBe(true); }
+    }
+    expect(used).toBe(true);
+  });
+});

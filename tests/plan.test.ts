@@ -107,7 +107,7 @@ describe('deadlines', () => {
   });
   it('DANGER ZONE when his usual pace is not enough, and its tasks today are marked', () => {
     const s = fresh();
-    s.missions.find((m) => m.id === 'course-lessons')!.unitsLeft = 90;
+    s.missions.find((m) => m.id === 'course-lessons')!.unitsLeft = 150;
     const fc = forecast(s, NOW);
     expect(fc.warns.some((w) => w.kind === 'pace')).toBe(true);
     expect(tasks(layoutDay(s, fc, MON, NOW)).some((i) => i.missionId === 'course-lessons' && i.must === 'danger')).toBe(true);

@@ -205,7 +205,8 @@ export function forecast(s: State, now: number): Forecast {
     const maxTail = Math.max(0, ...live.filter((m) => m.objectiveId === o.id && m.kind === 'work' && (units0.get(m.id) || 0) > 0).map(tail));
     return Math.max(0, diffDays(today, o.due!) - extra - maxTail);
   };
-  const order = [...deadlineObjs].sort((a, b) => a.due!.localeCompare(b.due!));
+  // soonest safe date first: a deadline with a long wait at the end (grading, a voucher) needs its work earlier
+  const order = [...deadlineObjs].sort((a, b) => safeOf(a, 0) - safeOf(b, 0) || a.due!.localeCompare(b.due!));
 
   /**
    * Walk forward day by day. mode 'real': each day gets what he usually does, in ranking order (deadline pace first,

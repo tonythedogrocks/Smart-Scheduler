@@ -38,7 +38,7 @@ export interface Forecast {
 }
 
 /** The ranking, most important first. */
-const R = { due: 1, final: 2, core: 3, danger: 4, deadline: 5, floor: 6, big: 7, ahead: 8, minor: 9, extra: 10 };
+const R = { final: 1, due: 2, core: 3, danger: 4, deadline: 5, floor: 6, big: 7, ahead: 8, minor: 9, extra: 10 };
 const WEIGHT = [0, 100, 95, 90, 80, 60, 50, 30, 15, 8, 2];
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
 const round5 = (x: number) => Math.ceil(x / 5) * 5;

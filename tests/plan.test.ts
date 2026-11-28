@@ -104,12 +104,12 @@ describe('deadlines', () => {
     s.missions.find((m) => m.id === 'course-lessons')!.unitsLeft = 2000;
     expect(forecast(s, NOW).warns.some((w) => w.objectiveId === 'course' && w.kind === 'failure')).toBe(true);
   });
-  it('FINAL STAND when his usual pace is not enough, and its tasks today are marked', () => {
+  it('DANGER ZONE when his usual pace is not enough, and its tasks today are marked', () => {
     const s = fresh();
     s.missions.find((m) => m.id === 'course-lessons')!.unitsLeft = 90;
     const fc = forecast(s, NOW);
     expect(fc.warns.some((w) => w.kind === 'pace')).toBe(true);
-    expect(tasks(layoutDay(s, fc, MON, NOW)).some((i) => i.missionId === 'course-lessons' && i.must)).toBe(true);
+    expect(tasks(layoutDay(s, fc, MON, NOW)).some((i) => i.missionId === 'course-lessons' && i.must === 'danger')).toBe(true);
   });
   it('waits for a grading period before the next step', () => {
     const s = fresh();
@@ -124,5 +124,16 @@ describe('a missed task', () => {
     const s = fresh(), now = at('2026-11-09T13:00:00');
     s.days[MON] = { morningEnd: at('2026-11-09T08:50:00'), misses: [{ m: 'exam-steps', at: 600 }] };
     expect(tasks(plan(s, MON, now)).some((i) => i.missionId === 'exam-steps' && i.start >= 780)).toBe(true);
+  });
+});
+
+describe('FINAL SHOT', () => {
+  it('marks work that, skipped today, loses a deadline even giving everything, and lets it use Off Duty', () => {
+    const s = fresh();
+    s.objectives.find((o) => o.id === 'exam')!.due = '2026-11-11';
+    s.missions.find((m) => m.id === 'exam-steps')!.unitsLeft = 14;
+    const fc = forecast(s, NOW);
+    expect(fc.must['exam-steps']?.kind).toBe('final');
+    expect(tasks(layoutDay(s, fc, MON, NOW)).some((i) => i.missionId === 'exam-steps' && i.must === 'final')).toBe(true);
   });
 });

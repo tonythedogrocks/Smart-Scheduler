@@ -35,7 +35,7 @@ export function problems(s: State, now: number): string[] {
     busy.sort((a, b) => a.start - b.start);
     for (let k = 1; k < busy.length; k++) for (let j = 0; j < k; j++) {
       const a = busy[j], b = busy[k];
-      const choreInOff = (x: PlanItem, y: PlanItem) => x.block?.kind === 'offduty' && y.key.startsWith('c:'); // a chore step may run into Off Duty
+      const choreInOff = (x: PlanItem, y: PlanItem) => x.block?.kind === 'offduty' && (y.key.startsWith('c:') || y.must === 'final'); // chore steps and FINAL SHOT work may use Off Duty
       if (b.start < a.end && !(a.block?.evtId && a.block.evtId === b.block?.evtId) && !choreInOff(a, b) && !choreInOff(b, a)) out.push(`${date}: "${a.title}" ${hm(a.start)}–${hm(a.end)} overlaps "${b.title}" ${hm(b.start)}–${hm(b.end)}`);
     }
     // sleep is the length set in Settings

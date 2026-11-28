@@ -107,6 +107,8 @@ box-shadow:5px 5px 0 -3px #fff,5px 5px 0 0 var(--ink),10px 10px 0 -3px #fff,10px
 .tl-kick .must{display:inline-block;margin-right:6px;padding:1px 6px;background:var(--red,#D92B21);color:#fff;border:2px solid var(--ink);border-radius:4px;letter-spacing:.08em}
 .tl-card.is-must{box-shadow:4px 4px 0 var(--red,#D92B21)}
 .tl-kick .must.danger{background:var(--yellow);color:var(--ink)}
+.full .must{padding:2px 8px;background:var(--red,#D92B21);color:#fff;border:2px solid var(--ink);border-radius:4px;font-family:var(--display);letter-spacing:.08em}
+.full .must.danger{background:var(--yellow);color:var(--ink)}
 .tl-card.is-must.danger{box-shadow:4px 4px 0 var(--yellow)}
 .tl-card.is-must.final{border-width:4px}
 .tl-kick{font-family:var(--display);font-size:13px;letter-spacing:.06em;color:var(--soft)}

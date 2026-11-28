@@ -18,8 +18,9 @@ export interface PlanItem {
   kind: 'mission' | 'fixed';
   missionId?: string; units?: number; baseMin?: number; min?: number; step?: number;
   done?: boolean; running?: boolean; now?: boolean; past?: boolean; logId?: string;
-  /** FINAL STAND: skipping this today costs this deadline (the Objective's title). */
-  must?: string;
+  /** FINAL SHOT: skipping it today loses a deadline even giving everything (Off Duty included);
+   *  DANGER ZONE: at his usual pace it misses a deadline (or skipping it today makes it miss). */
+  must?: 'final' | 'danger';
   block?: Block;
 }
 /** One thing a day needs: a mission, how much of it, how important. */
@@ -33,7 +34,7 @@ export interface Forecast {
   landing: Record<string, string | null>;
   warns: Warn[];
   /** today's tasks whose skipping costs a deadline: mission -> Objective title */
-  must: Record<string, string>;
+  must: Record<string, { kind: 'final' | 'danger'; title: string }>;
 }
 
 const WEIGHT = [0, 100, 80, 60, 30, 15, 8, 2];
@@ -166,10 +167,13 @@ export function forecast(s: State, now: number): Forecast {
   const brk = s.settings.breakMin ?? 10;
   const exCap = exerciseCeiling(s, today).cap;
   const last = new Map(live.filter((m) => m.kind === 'habit').map((m) => [m.id, lastDone(s, m.id)]));
-  const days: { date: string; sab: boolean; free: number; real: number; floor: number; big: number }[] = [];
+  const days: { date: string; sab: boolean; free: number; max: number; real: number; floor: number; big: number }[] = [];
   for (let t = 0; t <= H; t++) {
     const date = addDays(today, t), sab = isSabbath(s, date);
-    const slots = freeSlots(fixedBlocks(s, date), t === 0 ? round5(minsOf(now)) : 0);
+    const fx = fixedBlocks(s, date), from = t === 0 ? round5(minsOf(now)) : 0;
+    const slots = freeSlots(fx, from);
+    const off = fx.find((b) => b.kind === 'offduty');
+    const offMin = off ? Math.max(0, off.end - Math.max(off.start, from)) * 60 / (60 + brk) : 0;
     let free = slots.reduce((a, [x, y]) => a + (y - x >= 15 ? (y - x) * 60 / (60 + brk) : 0), 0);
     if (t === 0 && run) free -= Math.max(0, run.plannedMin * factor(s, run.missionId) - (now - run.startedAt) / 60000);
     let floor = 0;
@@ -190,7 +194,7 @@ export function forecast(s: State, now: number): Forecast {
     }
     const workFree = Math.max(0, free - floor);
     const real = sab ? 0 : share * Math.max(0, workFree - hold); // today: what's left of today's free time
-    days.push({ date, sab, free: sab ? 0 : workFree, real, floor, big: Math.min(big, workFree) });
+    days.push({ date, sab, free: sab ? 0 : workFree, max: sab ? 0 : workFree + offMin, real, floor, big: Math.min(big, workFree) });
   }
   const realW = days.map((d) => d.real);
   const avgW = realW.reduce((a, b) => a + b, 0) / Math.max(1, realW.length);
@@ -214,7 +218,7 @@ export function forecast(s: State, now: number): Forecast {
     for (let t = 0; t < from; t++) alloc.push([]);
     for (let t = from; t <= H; t++) {
       const d = days[t], out: Need[] = [], usedBy = new Map<string, number>();
-      let left = mode === 'real' ? d.real : d.free;
+      let left = mode === 'real' ? d.real : mode === 'max' ? d.max : d.free;
       const give = (o: Objective, amount: number, row: number) => {
         let ow = Math.min(remaining(o.id), (owed.get(o.id + row) || 0) + amount);
         for (let progressed = true; progressed;) {
@@ -288,27 +292,29 @@ export function forecast(s: State, now: number): Forecast {
     if (late(max, o)) warns.push({ objectiveId: o.id, title: o.title, due: o.due, lands: dm === null ? null : addDays(today, dm), kind: 'failure' });
     else if (late(real, o)) warns.push({ objectiveId: o.id, title: o.title, due: o.due, lands: landing[o.id], kind: 'pace' });
   }
-  // FINAL STAND: today's deadline work that, skipped, costs the deadline at his usual pace from tomorrow on
-  const must: Record<string, string> = {};
+  // Today's deadline work. FINAL SHOT: skipped, the deadline is lost even giving everything from tomorrow (Off Duty too).
+  // DANGER ZONE: at his usual pace the deadline is missed, or would be if this is skipped today.
+  const must: Forecast['must'] = {};
   const todayNeeds = plan.alloc[0] || [];
   if (todayNeeds.length) {
-    const after = (drop?: string) => {
+    const waits = (id: string, on: string, seen = new Set<string>()): boolean => { if (seen.has(id)) return false; seen.add(id); const m = byId.get(id); return [...(m?.after || []), ...(m?.afterNoWait || [])].some((a) => a === on || waits(a, on, seen)); };
+    const after = (mode: 'real' | 'max', drop?: string) => {
       const u = new Map(units0), dn = new Map(done0);
-      const waits = (id: string, on: string, seen = new Set<string>()): boolean => { if (seen.has(id)) return false; seen.add(id); const m = byId.get(id); return [...(m?.after || []), ...(m?.afterNoWait || [])].some((a) => a === on || waits(a, on, seen)); };
       for (const n of todayNeeds) {
         if (drop && (n.missionId === drop || waits(n.missionId, drop))) continue;
         u.set(n.missionId, Math.max(0, (u.get(n.missionId) || 0) - n.units)); if (!u.get(n.missionId)) dn.set(n.missionId, 0);
       }
-      return simulate('real', 1, u, dn);
+      return simulate(mode, 1, u, dn);
     };
-    const base = after();
+    const baseMax = after('max'), baseReal = after('real');
     for (const id of new Set(todayNeeds.map((n) => n.missionId))) {
       const o = deadlineObjs.find((x) => x.id === byId.get(id)?.objectiveId)!;
-      const allDeps = [o, ...objs.filter((x) => x.dependsOn?.includes(o.id))];
-      for (const ob of allDeps) {
-        if (!ob.due || diffDays(today, ob.due) > H) continue;
-        if (late(base, ob) || late(after(id), ob)) { must[id] = ob.title; break; }
-      }
+      const obs = [o, ...objs.filter((x) => x.dependsOn?.includes(o.id))].filter((x) => x.due && diffDays(today, x.due) <= H);
+      const lostMax = after('max', id), lostReal = after('real', id);
+      const fin = obs.find((ob) => !late(baseMax, ob) && late(lostMax, ob));
+      if (fin) { must[id] = { kind: 'final', title: fin.title }; continue; }
+      const dz = obs.find((ob) => late(baseReal, ob) || late(lostReal, ob));
+      if (dz) must[id] = { kind: 'danger', title: dz.title };
     }
   }
   const v: Forecast = { today, days: plan.alloc.map((needs, t) => ({ date: days[t].date, needs })), landing, warns, must };
@@ -400,7 +406,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   const saved = isToday ? s.days[date]?.plan : undefined;
   if (saved && saved.sig === planSig(s, date)) {
     const gone = (id: string) => { const m = byId.get(id); return !m || m.archived || (m.kind === 'work' && (m.unitsLeft ?? 0) <= 0); };
-    for (const p of saved.items) if (!gone(p.missionId) && !items.some((i) => i.key === p.key && (i.done || i.running))) items.push({ ...p, kind: 'mission', ...(fc.must[p.missionId] ? { must: fc.must[p.missionId] } : {}) });
+    for (const p of saved.items) if (!gone(p.missionId) && !items.some((i) => i.key === p.key && (i.done || i.running))) items.push({ ...p, kind: 'mission', ...(fc.must[p.missionId] ? { must: fc.must[p.missionId].kind } : {}) });
     return finish(items, isToday, nowMin);
   }
 
@@ -503,7 +509,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     if (len >= 45) slots = slots.map(([x, y]) => (x === at + len ? [x + (s.settings.breakMin ?? 10), y] : [x, y]) as [number, number]).filter(([x, y]) => y - x >= 5);
     const skip = used.get(m.id) || 0;
     used.set(m.id, skip + (m.rotation?.length ? 1 : units));
-    items.push({ key: keyFor(m.id), start: at, end: at + len, title: m.title, sub: label(m, Math.round(len), units, skip), detail: detailOf(s, m, skip), kind: 'mission', missionId: m.id, units, baseMin: m.kind === 'work' ? units * m.minutes : m.minutes, min: Math.round(len), ...(fc.must[m.id] && row === 3 ? { must: fc.must[m.id] } : {}) });
+    items.push({ key: keyFor(m.id), start: at, end: at + len, title: m.title, sub: label(m, Math.round(len), units, skip), detail: detailOf(s, m, skip), kind: 'mission', missionId: m.id, units, baseMin: m.kind === 'work' ? units * m.minutes : m.minutes, min: Math.round(len), ...(fc.must[m.id] && row === 3 ? { must: fc.must[m.id].kind } : {}) });
   };
   /** Best start for a task, or null. Scored by how often this kind of work gets done then. */
   const best = (m: Mission, len: number, row: number) => {
@@ -532,7 +538,12 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     if (!chores && n.row > 3) { placeChores(); chores = true; }
     const m = byId.get(n.missionId)!;
     if ([...allDeps(m.id)].some((d) => unplaced.has(d))) { unplaced.add(m.id); continue; }
-    const got = best(m, n.min, n.row);
+    let got = best(m, n.min, n.row);
+    // FINAL SHOT work that doesn't fit anywhere else may take Off Duty time
+    if (!got && fc.must[m.id]?.kind === 'final' && n.row === 3) {
+      const off = fixed.find((b) => b.kind === 'offduty');
+      if (off) { const keep = slots; slots = [...slots, [Math.max(off.start, round5(nowMin)), off.end] as [number, number]]; got = best(m, n.min, n.row); if (!got) slots = keep; }
+    }
     if (got) { placeAt(m, got.a, n.min, n.units, n.row); continue; }
     // doesn't fit whole: work splits across the gaps that are left (15 min or more)
     if (m.kind !== 'work' || n.units < 2 || m.travel) { unplaced.add(m.id); continue; }

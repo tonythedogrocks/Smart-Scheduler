@@ -109,8 +109,8 @@ export function App() {
                 if (!ws.length) return null;
                 return (
                   <div class="alert lock">
-                    <span class="k">{kind === 'failure' ? 'MISSION FAILURE' : 'FINAL STAND'}</span>
-                    <span>{kind === 'failure' ? 'Even with every free hour, these miss their deadline:' : 'At your usual pace, these miss their deadline. Every task for them counts:'}</span>
+                    <span class="k">{kind === 'failure' ? 'MISSION FAILURE' : 'DANGER ZONE'}</span>
+                    <span>{kind === 'failure' ? 'Even with every free hour, these miss their deadline:' : 'At your usual pace, these miss their deadline:'}</span>
                     {ws.map((w) => <span><b>{w.title}</b>: lands {w.lands ? `about ${fmtDate(w.lands)}` : 'too late'}, due {fmtDate(w.due)}</span>)}
                   </div>
                 );
@@ -119,8 +119,8 @@ export function App() {
                 {day.panels.map((p) => (
                   <li class={`${p.now ? 'is-now' : ''} ${p.done ? 'is-done' : ''} ${p.past && !p.done && !p.now ? 'is-past' : ''}`}>
                     <span class="tl-time">{p.time || p.h}</span>
-                    <button type="button" class={`tl-card ${p.fixed ? 'fixed' : ''} ${p.must && !p.done ? 'is-must final' : ''}`} style={p.color && !p.done && !p.now ? `border-left:10px solid ${p.color}` : ''} onClick={() => go({ open: p.key })}>
-                      {(p.kick || (p.must && !p.done)) && <span class="tl-kick">{p.must && !p.done && <span class="must final">FINAL STAND</span>}{p.kick}</span>}
+                    <button type="button" class={`tl-card ${p.fixed ? 'fixed' : ''} ${p.must && !p.done ? `is-must ${p.must}` : ''}`} style={p.color && !p.done && !p.now ? `border-left:10px solid ${p.color}` : ''} onClick={() => go({ open: p.key })}>
+                      {(p.kick || (p.must && !p.done)) && <span class="tl-kick">{p.must && !p.done && <span class={`must ${p.must}`}>{p.must === 'final' ? 'FINAL SHOT' : 'DANGER ZONE'}</span>}{p.kick}</span>}
                       <span class="tl-t">{p.t}</span>
                       {p.m && <span class="tl-m">{p.m}</span>}
                       {(p.done || p.now || p.running) && <span class="tag" style={`color:${p.done ? '#1B7A44' : '#B3231A'};border-color:${p.done ? '#1B7A44' : '#B3231A'}`}>{p.done ? 'DONE' : p.running ? 'GOING' : 'NOW!'}</span>}

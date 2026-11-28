@@ -42,7 +42,7 @@ export function Panel({ p, day }: { p: PanelVM; day: DayVM }) {
   return (
     <div class="full" style="animation:lbPop 420ms cubic-bezier(.2,.9,.25,1) both">
       <span class="cap">{p.h}</span>
-      {p.must && !p.done && <span class="must final" style="align-self:flex-start">FINAL STAND</span>}
+      {p.must && !p.done && <span class={`must ${p.must}`} style="align-self:flex-start">{p.must === 'final' ? 'FINAL SHOT' : 'DANGER ZONE'}</span>}
       <h1>{p.t.toUpperCase()}</h1>
       {p.m && <span style="font-size:17px">{p.m}</span>}
       {p.d && <p class="bubble">{p.d}</p>}

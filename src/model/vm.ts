@@ -6,7 +6,7 @@ import { nice } from './seed';
 /** One row on the timeline, and what tapping it can do. */
 export interface PanelVM {
   key: string; start: number; time: string; h: string; t: string; m?: string; d?: string; kick?: string; color?: string;
-  fixed?: boolean; past?: boolean; now?: boolean; done?: boolean; running?: boolean; must?: string;
+  fixed?: boolean; past?: boolean; now?: boolean; done?: boolean; running?: boolean; must?: 'final' | 'danger';
   missionId?: string; units?: number; baseMin?: number; min?: number; step?: number; logId?: string;
   act: 'mission' | 'meal' | 'cook' | 'dishes' | 'morning' | 'choice' | 'event' | 'info';
   evtId?: string; date: string; meal?: 'lunch' | 'dinner';

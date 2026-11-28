@@ -537,10 +537,11 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   // regret: how much a task loses if it can't have its best time of day
   const regret = (n: Need) => { const m = byId.get(n.missionId)!; const r = openBuckets.map((b) => odds.rate(typeOf(m), b)).sort((a, b) => b - a); return (r[0] || 0) - (r[1] ?? 0); };
   const queue = [...needs].sort((a, b) => WEIGHT[b.row] + (byId.get(b.missionId)?.priority || 0) - WEIGHT[a.row] - (byId.get(a.missionId)?.priority || 0) || regret(b) - regret(a));
-  placeChores(); // chores due today are due-today work: their steps go on the clock first
+  let chores = false; // chore steps are due-today work: on the clock right after FINAL SHOT work
   while (queue.length) {
     const i = Math.max(0, queue.findIndex((n) => [...allDeps(n.missionId)].every((d) => !queue.some((q) => q.missionId === d))));
     const n = queue.splice(i, 1)[0];
+    if (!chores && n.row > R.final) { placeChores(); chores = true; }
     const m = byId.get(n.missionId)!;
     if ([...allDeps(m.id)].some((d) => unplaced.has(d))) { unplaced.add(m.id); continue; }
     let got = best(m, n.min, n.row);
@@ -561,6 +562,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     }
     if (left > 0) unplaced.add(m.id);
   }
+  if (!chores) placeChores();
   // ---- Fill what's left of the day: more of the big goals, then smaller ones, then getting further ahead.
   if (!sab) {
     const order = extra.sort((a, b) => Number(isBig(b)) - Number(isBig(a)) || (b.priority || 0) - (a.priority || 0) || Number(!s.objectives.find((o) => o.id === a.objectiveId)?.due) - Number(!s.objectives.find((o) => o.id === b.objectiveId)?.due));

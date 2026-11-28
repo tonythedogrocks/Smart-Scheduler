@@ -440,7 +440,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     const m = byId.get(n.missionId); if (!m) continue;
     const tag = isToday ? fc.must[m.id]?.kind : undefined;
     const row = n.row === 5 ? R.ahead : tag === 'final' ? R.final : tag === 'danger' ? R.danger : R.deadline;
-    if (sab && row > R.core) continue;
+    if (sab && row > R.danger) continue;
     const per = n.min / n.units, max = Math.max(1, m.maxBlockUnits || n.units);
     for (let left = n.units; left > 0; left -= max) { const u = Math.min(max, left); add(m, row, u, u * per); }
   }

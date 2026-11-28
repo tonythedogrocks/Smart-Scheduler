@@ -84,6 +84,7 @@ export interface Evt {
   leaveWindow?: [number, number]; // the app picks the start between these (minutes from midnight)
   untilBack?: boolean;     // open-ended: lasts until he taps I'm back (DayRec.backAt)
   meals?: ('lunch' | 'dinner')[]; // meals he eats at the event (no meal planned at home)
+  eating?: boolean;        // the event is a meal (e.g. a late breakfast): workouts wait after it
   skip?: string[];
 }
 

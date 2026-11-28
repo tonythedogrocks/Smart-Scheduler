@@ -522,6 +522,7 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
     const bigGap = m.workout ? Math.max(gapM, s.settings.bigMealGap) : gapM * 2;
     const forbid: [number, number][] = waits ? fixed.filter((b) => b.kind === 'meal').map((b) => [b.start, b.end + (b.big ? bigGap : gapM)] as [number, number]) : [];
     if (waits && mb0) forbid.push([mb0.start, mb0.end + gapM]); // breakfast is the last part of the morning routine
+    if (waits) for (const e of eventsOn(s, date)) if (e.eating) forbid.push([e.start, e.end + gapM]);
     let lo = 0, hi = 1e9;
     if (m.daylight && sun) { lo = Math.ceil(sun[0] / 5) * 5; hi = Math.floor(sun[1]); }
     if (m.window) { lo = Math.max(lo, m.window[0]); hi = Math.min(hi, m.window[1]); }

@@ -35,6 +35,8 @@ export interface Forecast {
   warns: Warn[];
   /** today's tasks whose skipping costs a deadline: mission -> Objective title */
   must: Record<string, { kind: 'final' | 'danger'; title: string }>;
+  /** deadlines that miss at his usual pace: their work on later days shows as DANGER ZONE */
+  lateIds: string[];
 }
 
 /** The ranking, most important first. */
@@ -333,7 +335,8 @@ export function forecast(s: State, now: number): Forecast {
       if (dz) must[id] = { kind: 'danger', title: dz.title };
     }
   }
-  const v: Forecast = { today, days: plan.alloc.map((needs, t) => ({ date: days[t].date, needs })), landing, warns, must };
+  const lateIds = objs.filter((o) => o.due && diffDays(today, o.due) <= H && late(real, o)).map((o) => o.id);
+  const v: Forecast = { today, days: plan.alloc.map((needs, t) => ({ date: days[t].date, needs })), landing, warns, must, lateIds };
   memo = { k, v };
   return v;
 }
@@ -452,7 +455,9 @@ export function layoutDay(s: State, fc: Forecast, date: string, now: number): Pl
   // deadline work, in blocks no longer than each task allows
   for (const n of fc.days.find((d) => d.date === date)?.needs || []) {
     const m = byId.get(n.missionId); if (!m) continue;
-    const tag = isToday ? fc.must[m.id]?.kind : undefined;
+    // later days: work for a deadline that misses at his usual pace (or one that depends on it) is DANGER ZONE
+    const inDanger = () => [m.objectiveId, ...s.objectives.filter((o) => o.dependsOn?.includes(m.objectiveId)).map((o) => o.id)].some((id) => fc.lateIds.includes(id));
+    const tag = isToday ? fc.must[m.id]?.kind : inDanger() ? 'danger' : undefined;
     // on a rest day, deadline work is only there because it's what saves a deadline: DANGER ZONE
     const row = n.row === 5 ? R.ahead : tag === 'final' ? R.final : tag === 'danger' || sab ? R.danger : R.deadline;
     if (sab && row > R.danger) continue;

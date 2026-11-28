@@ -157,3 +157,13 @@ describe('rest day', () => {
     expect(used).toBe(true);
   });
 });
+
+describe('later days', () => {
+  it('show DANGER ZONE on work for a deadline that misses at the usual pace', () => {
+    const s = fresh();
+    s.missions.find((m) => m.id === 'course-lessons')!.unitsLeft = 200;
+    const fc = forecast(s, NOW);
+    expect(fc.lateIds.length).toBeGreaterThan(0);
+    expect(tasks(layoutDay(s, fc, addDays(MON, 1), NOW)).some((i) => i.must === 'danger')).toBe(true);
+  });
+});
